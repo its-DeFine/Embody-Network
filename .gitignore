@@ -6,7 +6,7 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+# dist/
 downloads/
 eggs/
 .eggs/
@@ -43,7 +43,7 @@ coverage.xml
 htmlcov/
 
 # Project specific
-webapp/dist/
+# webapp/dist/
 server/models/
 server/cache/
 server/temp/
