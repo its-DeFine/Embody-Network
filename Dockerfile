@@ -16,8 +16,8 @@ RUN apt-get update && \
         curl \
         && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements (using mock requirements for testing)
-COPY server/requirements-mock.txt /app/requirements.txt
+# Copy requirements (using test  requirements for testing)
+COPY server/requirements-test.txt /app/requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
