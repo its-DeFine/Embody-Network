@@ -1,0 +1,138 @@
+services:
+  # Ollama for local LLM inference with GPU support
+  ollama:
+    image: ollama/ollama:latest
+    container_name: byoc-ollama
+    runtime: nvidia
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_ORIGINS=*
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Ollama model loader - pulls model after Ollama is ready
+  ollama-loader:
+    image: curlimages/curl:latest
+    container_name: byoc-ollama-loader
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - default
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama to be ready...' &&
+        sleep 5 &&
+        echo 'Pulling tinyllama model...' &&
+        curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"tinyllama\"}' -w '\\n' &&
+        echo 'Waiting for model download to complete...' &&
+        sleep 30 &&
+        echo 'Loading model into memory with 10m keep-alive...' &&
+        curl -X POST http://ollama:11434/api/generate -d '{\"model\": \"tinyllama\", \"prompt\": \"Hello\", \"stream\": false, \"keep_alive\": \"10m\"}' -w '\\n' &&
+        echo 'Model loaded successfully with 10 minute keep-alive' &&
+        echo 'Periodically refreshing model to keep it loaded...' &&
+        while true; do
+          sleep 300;
+          echo 'Refreshing model keep-alive...';
+          curl -s -X POST http://ollama:11434/api/generate -d '{\"model\": \"tinyllama\", \"prompt\": \"test\", \"stream\": false, \"keep_alive\": \"10m\"}' > /dev/null;
+        done
+      "
+    restart: "unless-stopped"
+
+  webserver:
+    image: caddy:latest
+    container_name: byoc-webserver-test
+    ports:
+      - 8088:8088
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./webapp/dist:/var/www/html/app
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    container_name: byoc-agent-net-test-worker
+    ports:
+      - 9876:9876
+    environment:
+      - "ORCH_URL=https://orchestrator:9995"
+      - "ORCH_SECRET=orch-secret"
+      - "CAPABILITY_NAME=agent-net"
+      - "CAPABILITY_DESCRIPTION=Agent network capability with GPU uptime monitoring"
+      - "CAPABILITY_URL=http://worker:9876"
+      - "CAPABILITY_PRICE_PER_UNIT=90000000000000"
+      - "CAPABILITY_PRICE_SCALING=1"
+      - "CAPABILITY_CAPACITY=10"
+      - "PYTHONUNBUFFERED=1"
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    runtime: nvidia
+  # gateway:
+  #   image: livepeer/go-livepeer:sha-5627b90
+  #   container_name: byoc-gateway-test
+  #   volumes:
+  #     - ./data/gateway:/data
+  #   ports:
+  #     - 9999:9999
+  #   command: ["-gateway",
+  #         "-orchAddr=https://orchestrator:9995",
+  #         "-httpAddr=gateway:9999",
+  #         "-httpIngest=true",
+  #         "-maxTicketEV=100000000000000",
+  #         "-maxTotalEV=100000000000000",
+  #         "-maxFaceValue=1000000000000000",
+  #         "-v=6",
+  #         "-network=arbitrum-one-mainnet",
+  #         "-ethUrl=https://arb1.arbitrum.io/rpc",
+  #         "-ethPassword=STRONG_PASSWORD_HERE",
+  #         "-dataDir=/data"]
+  # orchestrator:
+  #   image: livepeer/go-livepeer:sha-5627b90
+  #   container_name: byoc-orchestrator-test
+  #   volumes:
+  #     - ./data/orchestrator:/data
+  #   ports:
+  #     - 9995:9995
+  #   command: ["-orchestrator",
+  #         "-orchSecret=orch-secret",
+  #         "-serviceAddr=orchestrator:9995",
+  #         "-v=6",
+  #         "-network=arbitrum-one-mainnet",
+  #         "-ethUrl=https://arb1.arbitrum.io/rpc",
+  #         "-ethPassword=rh87cM7IA1vJGGpVa7sF",
+  #         "-dataDir=/data",
+  #         "-ethOrchAddr=0xa03113bab8d4ebe5695591f60011741233e8b82f",
+  #         "-pricePerUnit=100000000000000",
+  #         "-ticketEV=90000000000000",  
+  #         "-maxFaceValue=1000000000000000",]
+volumes:
+  ollama_data:
+
+networks:
+  default:
+    name: byoc
+    external: true

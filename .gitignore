@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+metrics/
+
+# Test coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# Project specific
+webapp/dist/
+server/models/
+server/cache/
+server/temp/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build outputs
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.dylib
+*.dll
+
+# Documentation
+docs/_build/
+site/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+data/
+plans/
