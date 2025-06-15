@@ -68,7 +68,7 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile.gpu
+      dockerfile: Dockerfile
     container_name: byoc-agent-net-test-worker
     ports:
       - 9876:9876
