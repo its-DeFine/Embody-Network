@@ -1,48 +1,55 @@
 
-# Instructions to run sample app with generic container pipeline
- 
-This is a sample web application that uses a custom built container as the worker.  The API is served by a Livepeer Gateway node that handles coordinating with Orchestrator s and managing payments for the compute completed.  
+# Agent-Net: GPU Check Pipeline with BYOC Capability
+
+This is an implementation of a BYOC (Bring Your Own Container) pipeline that provides GPU check functionality to callers. It deploys an Ollama container and includes a custom capability for GPU monitoring that returns GPU state and model info  from ollama. 
+
+## Overview
+
+The pipeline enables:
+- Deployment of custom Ollama containers with GPU support
+- Real-time GPU health checks and vRAM monitoring
+- Querying of deployed models on the Ollama server
 
 ### Prerequisites
 
 - docker installed and running
 
-- access to an Nvidia GPU or machine to run worker.  Note: if want to run on CPU you can change "cuda" in server/server.py to "cpu"
+- access to an a GPU supported by Ollama.
 
-- an Ethereum address wallet json encrypted and copied into data/gateway/keystore
+### Instructions for Orchestrators
 
-### Instructions  
+To launch the container with GPU check capability:
 
-1. Pull docker image of go-livepeer with generic pipeline
+1. **Navigate to Project Root**
+   ```bash
+   cd /path/to/agent-net
+   ```
 
-     `docker pull adastravideo/go-livepeer:dynamic-capabilities-2`
+2. **Build the Container**
+   ```bash
+   docker compose build --no-cache
+   ```
 
-2) Build the webapp for static file serving (need to have node/npm installed)
-    ```
-    cd webapp
-    npm install
-    npm run build
-    cd ..
-    ```
-3) make folders
-    ```
-    mkdir -p data/models
-    mkdir -p data/orchestrator
-    mkdir -p data/gateway
-    mkdir worker
-    ```
+3. **Launch the Services**
+   ```bash
+   docker compose up
+   ```
 
-4) create docker network
-    ```
-    docker network create byoc
-    ```
-5) Update the docker-compose.yml file and Orchestrator config
-    - Gateway
-      - update the `-ethPassword` to be the password for the file.
-    - Orchestrator
-      - update the `-serviceAddr` in `orchestrator` container section to the ip address and port want to use.
-      - Change the -ethOrchAddr to your on chain orchestrator if want to test on chain. If not updated you will pay to send tickets to another ethereum account, don't forget to update this.
-    - Worker
-      - if want to test off chain, update the `CAPABILITY_PRICE_PER_UNIT` in with `worker` container section to `0` and change `-network` to `offchain` in `orchestrator` and `gateway` container section.
-      - update the `CAPABILITY_URL` to be the accessible ip address/port or dns name of the worker that the Orchestrator will forward the work request to.
-    
+4. **Wait for Model Download**
+   The Ollama model will be automatically downloaded on first launch. Monitor the logs to ensure the model is ready before accepting requests.
+
+### GPU Check Capability
+
+The custom GPU check capability provides:
+
+- **vRAM Usage Monitoring**: Real-time tracking of GPU memory utilization
+- **Model Status**: Lists all currently deployed models on the Ollama server
+- **Resource Availability**: Checks GPU availability for new model deployments
+- **Safeguard Functionality**: Prevents overloading by monitoring resource constraints
+
+This capability queries the Ollama server and returns structured data about GPU state
+
+  
+### Future Integration
+
+This GPU check pipeline serves as a safeguard component that will be integrated into larger agent-net app we develop seperately. 
