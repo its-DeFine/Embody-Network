@@ -123,9 +123,9 @@ services:
   #         "-v=6",
   #         "-network=arbitrum-one-mainnet",
   #         "-ethUrl=https://arb1.arbitrum.io/rpc",
-  #         "-ethPassword=rh87cM7IA1vJGGpVa7sF",
+  #         "-ethPassword=",
   #         "-dataDir=/data",
-  #         "-ethOrchAddr=0xa03113bab8d4ebe5695591f60011741233e8b82f",
+  #         "-ethOrchAddr=",
   #         "-pricePerUnit=100000000000000",
   #         "-ticketEV=90000000000000",  
   #         "-maxFaceValue=1000000000000000",]
