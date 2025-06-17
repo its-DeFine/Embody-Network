@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Configuration for different capabilities
 CAPABILITIES = {
     "gpu-check": {
-        "endpoint": "http://localhost:8088/gateway/process/request/agent-net",
+        "endpoint": "http://localhost:9999/process/request/agent-net",  # Direct gateway (no Caddy)
         "capability_name": "agent-net", 
         "run_command": "agent-net",
         "payload_generator": lambda agent_id: {
@@ -34,35 +34,21 @@ CAPABILITIES = {
             "timestamp": time.time()
         }
     },
-    "text-to-image": {
-        "endpoint": "http://localhost:8088/gateway/process/request/text-to-image",
-        "capability_name": "text-to-image",
-        "run_command": "text-to-image",
-        "payload_generator": lambda agent_id: {
-            "prompt": random.choice([
-                "a beautiful sunset over mountains",
-                "a cyberpunk city at night",
-                "a magical forest with glowing plants",
-                "an underwater coral reef scene"
-            ]),
-            "agent_id": agent_id,
-            "seed": random.randint(1, 1000000),
-            "timestamp": time.time()
-        }
-    }
+   
 }
 
 @dataclass
-class UptimeInfo:
-    """Information about agent uptime from GPU check"""
+class GPUInfo:
+    """Information about agent GPU status"""
     agent_id: str
-    uptime_percent: float
-    last_check: datetime = None
+    vram_available_gb: float
+    vram_used_gb: float
+    vram_total_gb: float
+    models_loaded: int
+    model_names: List[str] = field(default_factory=list)
     gpu_available: bool = True
-    model_name: str = None
-    vram_usage_mb: float = 0.0
-    total_models: int = 0
-    
+    last_check: datetime = None
+
 @dataclass 
 class RequestStats:
     """Statistics for tracking request performance"""
@@ -111,34 +97,34 @@ class RequestStats:
         }
 
 class UptimeAwareCapabilityTester:
-    """Capability tester that adjusts job rate based on agent uptime from direct GPU checks"""
+    """Capability tester that adjusts job rate based on actual VRAM usage"""
     
     def __init__(self, 
                  base_jobs_per_minute: int,
                  capabilities: List[str],
                  target_agent_id: str,
-                 gateway_url: str = "http://localhost:8088",
-                 uptime_query_interval: int = 30):
+                 gateway_url: str = "http://localhost:9999",  # Direct gateway (no Caddy)
+                 gpu_query_interval: int = 30):
         """
-        Initialize the uptime-aware tester
+        Initialize the VRAM-aware tester
         
         Args:
-            base_jobs_per_minute: Base job rate for 99%+ uptime
+            base_jobs_per_minute: Base job rate when VRAM > 30GB
             capabilities: List of capabilities to test
             target_agent_id: ID of the agent to monitor
             gateway_url: URL of the Livepeer gateway
-            uptime_query_interval: How often to query uptime (seconds)
+            gpu_query_interval: How often to query GPU status (seconds)
         """
         self.base_jobs_per_minute = base_jobs_per_minute
         self.capabilities = capabilities
         self.target_agent_id = target_agent_id
         self.gateway_url = gateway_url.rstrip('/')
-        self.uptime_query_interval = uptime_query_interval
+        self.gpu_query_interval = gpu_query_interval
         
         self.running = True
         self.stats = {cap: RequestStats() for cap in capabilities}
-        self.current_uptime_info: Optional[UptimeInfo] = None
-        self.current_job_rate = base_jobs_per_minute
+        self.current_gpu_info: Optional[GPUInfo] = None
+        self.current_delay_seconds = 0  # Additional delay between jobs
         self.start_time = time.time()
         self.jobs_sent = 0
         
@@ -147,56 +133,58 @@ class UptimeAwareCapabilityTester:
         if invalid_caps:
             raise ValueError(f"Invalid capabilities: {invalid_caps}. Available: {list(CAPABILITIES.keys())}")
             
-    async def get_agent_uptime(self) -> Optional[UptimeInfo]:
-        """Query worker GPU check endpoint for GPU/VRAM status"""
+    async def get_agent_gpu_status_from_job_response(self, response_text: str) -> Optional[GPUInfo]:
+        """Extract GPU status from BYOC job response (eliminates duplicate monitoring calls)"""
         try:
-            # Query worker's GPU check endpoint
-            async with aiohttp.ClientSession() as session:
-                # Use the worker endpoint through Caddy proxy
-                url = f"{self.gateway_url.rstrip('/')}/worker/gpu-check"
-                payload = {"agent_id": self.target_agent_id}
-                
-                async with session.post(url, json=payload) as resp:
-                    if resp.status != 200:
-                        print(f"❌ Failed to get GPU status: HTTP {resp.status}")
-                        return None
-                        
-                    data = await resp.json()
-                    
-                    # Extract data from response
-                    return UptimeInfo(
-                        agent_id=data.get('agent_id', self.target_agent_id),
-                        uptime_percent=data.get('uptime_percent', 85.0),
-                        last_check=datetime.now(),
-                        gpu_available=data.get('gpu_count', 0) > 0,
-                        model_name=data.get('model_name', 'Unknown'),
-                        vram_usage_mb=data.get('vram_usage_mb', 0.0),
-                        total_models=data.get('total_models', 0)
-                    )
+            data = json.loads(response_text)
+            
+            # Extract actual VRAM usage by models (keep in MB)
+            vram_usage_mb = data.get('vram_usage_mb', 0.0)
+            
+            model_name = data.get('model_name', '')
+            model_names = [model_name] if model_name else []
+            
+            return GPUInfo(
+                agent_id=data.get('agent_id', self.target_agent_id),
+                vram_available_gb=vram_usage_mb,  # Actually MB, but keeping field name for compatibility
+                vram_used_gb=vram_usage_mb,       # Actually MB, but keeping field name for compatibility  
+                vram_total_gb=vram_usage_mb,      # Actually MB, but keeping field name for compatibility
+                models_loaded=data.get('total_models', 0),
+                model_names=model_names,
+                gpu_available=data.get('gpu_count', 0) > 0,
+                last_check=datetime.now()
+            )
                         
         except Exception as e:
-            print(f"❌ Error querying GPU status: {e}")
+            print(f"❌ Error parsing GPU status from job response: {e}")
             return None
             
-    def calculate_job_rate(self, uptime_percent: float) -> int:
+    def calculate_delay(self, gpu_info: GPUInfo) -> float:
         """
-        Calculate jobs per minute based on uptime percentage
+        Calculate additional delay based on model VRAM usage (in MB)
         
-        Punishment strategy:
-        - 99%+ uptime: 100% job rate (base rate)
-        - 95-99% uptime: 50% job rate  
-        - 90-95% uptime: 10% job rate
-        - <90% uptime: 0% job rate (full punishment)
+        Case 2a: Models using > 30,000MB VRAM and models exist -> no delay (big models get priority)
+        Case 2b: Models using < 30,000MB VRAM -> add delay (small models get delayed)
         """
-        if uptime_percent >= 99.0:
-            return self.base_jobs_per_minute
-        elif uptime_percent >= 95.0:
-            return int(self.base_jobs_per_minute * 0.5)
-        elif uptime_percent >= 90.0:
-            return int(self.base_jobs_per_minute * 0.1)
+        model_vram_usage_mb = gpu_info.vram_used_gb  # Actually MB despite field name
+        
+        if model_vram_usage_mb > 30000.0 and gpu_info.models_loaded > 0:
+            # Case 2a: Big models (>30GB = 30,000MB) get priority - no delay
+            return 0.0
         else:
-            return 0
-            
+            # Case 2b: Small models get delayed
+            if model_vram_usage_mb > 1000.0:
+                # Medium models (1-30GB = 1,000-30,000MB) get moderate delay
+                return 5.0  # 5 second delay
+            else:
+                # Tiny models (<1GB = <1,000MB) get longer delay
+                return 15.0  # 15 second delay
+                
+    def get_job_interval(self) -> float:
+        """Calculate total interval between jobs (base rate + VRAM delay)"""
+        base_interval = 60.0 / self.base_jobs_per_minute
+        return base_interval + self.current_delay_seconds
+        
     def create_livepeer_headers(self, capability_config: Dict[str, str]) -> Dict[str, str]:
         """Create proper Livepeer headers for gateway requests"""
         job_header = base64.b64encode(json.dumps({
@@ -220,6 +208,10 @@ class UptimeAwareCapabilityTester:
             headers = self.create_livepeer_headers(capability_config)
             payload = capability_config["payload_generator"](self.target_agent_id)
             
+            print(f"🔍 JOB REQUEST: {capability_config['endpoint']}")
+            print(f"📦 Payload: {payload}")
+            print(f"📋 Headers: {headers}")
+            
             response = requests.post(
                 capability_config["endpoint"],
                 headers=headers,
@@ -227,95 +219,69 @@ class UptimeAwareCapabilityTester:
                 timeout=25
             )
             
+            print(f"📥 JOB RESPONSE: Status={response.status_code}, Body={response.text[:200]}...")
+            
             response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
             
-            # We're getting real GPU data from Ollama, so ignore response metadata
-            # The mock server's metadata would overwrite our real Ollama data
+            # Return response data - GPU status will be extracted in the main loop
             
             return (
                 response.status_code,
                 response_time,
                 response.text if response.status_code != 200 else None,
-                payload
+                payload,
+                response.text if response.status_code == 200 else None  # Add successful response data
             )
             
         except requests.exceptions.Timeout:
             response_time = (time.time() - start_time) * 1000
-            return (0, response_time, "Request timeout", {})
+            return (0, response_time, "Request timeout", {}, None)
             
         except requests.exceptions.RequestException as e:
             response_time = (time.time() - start_time) * 1000
-            return (-1, response_time, str(e), {})
+            return (-1, response_time, str(e), {}, None)
             
-    async def update_uptime_loop(self):
-        """Background loop to periodically update uptime information"""
-        while self.running:
-            uptime_info = await self.get_agent_uptime()
-            if uptime_info:
-                self.current_uptime_info = uptime_info
-                old_rate = self.current_job_rate
-                self.current_job_rate = self.calculate_job_rate(uptime_info.uptime_percent)
-                
-                if old_rate != self.current_job_rate:
-                    print(f"\n📊 Job rate changed: {old_rate} → {self.current_job_rate} jobs/min")
-                    print(f"   Model: {uptime_info.model_name}")
-                    print(f"   VRAM: {uptime_info.vram_usage_mb:.0f}MB")
-                    print(f"   GPU Score: {uptime_info.uptime_percent:.1f}%")
-                    
-            await asyncio.sleep(self.uptime_query_interval)
+    # GPU monitoring eliminated - we get GPU status from each job response instead
             
     async def run_job_loop(self):
-        """Main loop that sends jobs at calculated rate"""
-        print(f"\n🚀 UPTIME-AWARE CAPABILITY TESTER STARTED")
+        """Main loop that sends jobs with VRAM-based delay logic (GPU data from job responses)"""
+        print(f"\n🚀 SIMPLIFIED VRAM-AWARE CAPABILITY TESTER STARTED")
         print(f"🎯 Target Agent: {self.target_agent_id}")
         print(f"📦 Base Job Rate: {self.base_jobs_per_minute} jobs/min")
         print(f"🎪 Capabilities: {', '.join(self.capabilities)}")
-        print(f"🔄 Uptime Query Interval: {self.uptime_query_interval}s")
+        print(f"🧠 Logic: Case 2a (VRAM>30GB+models): No delay | Case 2b (other): Add delay")
+        print(f"🔄 GPU Status: Extracted from each job response (no separate monitoring)")
         print("=" * 80)
         
-        # Start uptime monitoring
-        uptime_task = asyncio.create_task(self.update_uptime_loop())
-        
         try:
-            # Get initial uptime data
-            initial_uptime = await self.get_agent_uptime()
-            if initial_uptime:
-                self.current_uptime_info = initial_uptime
-                self.current_job_rate = self.calculate_job_rate(initial_uptime.uptime_percent)
-                print(f"\n🤖 Model: {initial_uptime.model_name}")
-                print(f"💾 VRAM Usage: {initial_uptime.vram_usage_mb:.0f} MB")
-                print(f"📊 GPU Score: {initial_uptime.uptime_percent:.1f}%")
-                print(f"📊 Initial job rate: {self.current_job_rate} jobs/min")
+            # Start with default delay until first job response gives us GPU data
+            self.current_delay_seconds = 5.0  # Default moderate delay
+            print(f"\n⏳ Initial delay: {self.current_delay_seconds}s (will update from first job response)")
             
             while self.running:
-                # Wait for initial uptime data
-                if self.current_uptime_info is None:
-                    print("⏳ Waiting for initial uptime data...")
-                    await asyncio.sleep(1)
-                    continue
-                    
-                # Check current job rate
-                if self.current_job_rate == 0:
-                    # Full punishment - no jobs
-                    print(f"\n🛑 Job sending suspended - GPU Score too low ({self.current_uptime_info.uptime_percent:.1f}%) - VRAM: {self.current_uptime_info.vram_usage_mb:.0f}MB")
-                    
-                    # Record delayed requests
-                    for cap in self.capabilities:
-                        self.stats[cap].add_delayed()
-                        
-                    await asyncio.sleep(60)  # Check again in a minute
-                    continue
                     
                 # Calculate delay between jobs
-                delay_seconds = 60.0 / self.current_job_rate
+                delay_seconds = self.get_job_interval()
                 
                 # Send a job for a random capability
                 capability = random.choice(self.capabilities)
                 
-                # Make the request
-                status_code, response_time, error, payload = self.make_single_request(capability)
+                                # Make the request
+                status_code, response_time, error, payload, success_response = self.make_single_request(capability)
                 self.stats[capability].add_response(status_code, response_time, error)
                 self.jobs_sent += 1
+                
+                # Extract GPU data from successful responses (eliminating separate monitoring)
+                if status_code == 200 and success_response:
+                    gpu_info = await self.get_agent_gpu_status_from_job_response(success_response)
+                    if gpu_info:
+                        old_delay = self.current_delay_seconds
+                        self.current_gpu_info = gpu_info
+                        self.current_delay_seconds = self.calculate_delay(gpu_info)
+                        if old_delay != self.current_delay_seconds:
+                            print(f"📊 Delay updated from job response: {old_delay}s → {self.current_delay_seconds}s")
+                            case_status = "2a" if self.current_delay_seconds == 0 else "2b"
+                            print(f"   VRAM: {gpu_info.vram_used_gb:.0f}MB, Models: {gpu_info.models_loaded} (Case {case_status})")
                 
                 # Log result
                 if status_code == 200:
@@ -323,19 +289,19 @@ class UptimeAwareCapabilityTester:
                 else:
                     status_emoji = "❌"
                     
-                # Ensure we have valid uptime info
-                if self.current_uptime_info:
-                    model_name = self.current_uptime_info.model_name or "Unknown"
-                    vram_mb = self.current_uptime_info.vram_usage_mb or 0.0
+                # Display current status
+                if self.current_gpu_info:
+                    model_names = ', '.join(self.current_gpu_info.model_names)
+                    vram_display = f"{self.current_gpu_info.vram_used_gb:.0f}MB"
                 else:
-                    model_name = "No data"
-                    vram_mb = 0.0
+                    model_names = "Waiting for data..."
+                    vram_display = "Unknown"
                     
                 print(f"{status_emoji} [{datetime.now().strftime('%H:%M:%S')}] {capability}: "
                       f"{status_code} ({response_time:.0f}ms) | "
-                      f"Rate: {self.current_job_rate}/min | "
-                      f"Model: {model_name} | "
-                      f"VRAM: {vram_mb:.0f}MB")
+                      f"Delay: {self.current_delay_seconds}s | "
+                      f"VRAM: {vram_display} | "
+                      f"Models: {model_names}")
                 
                 # Print statistics periodically
                 if self.jobs_sent % 50 == 0:
@@ -348,11 +314,6 @@ class UptimeAwareCapabilityTester:
             print("\n🛑 Received interrupt signal")
         finally:
             self.running = False
-            uptime_task.cancel()
-            try:
-                await uptime_task
-            except asyncio.CancelledError:
-                pass
                 
     def print_statistics(self):
         """Print current statistics"""
@@ -362,18 +323,15 @@ class UptimeAwareCapabilityTester:
         total_time = time.time() - self.start_time
         print(f"🕐 Total Runtime: {total_time:.1f}s")
         print(f"📤 Total Jobs Sent: {self.jobs_sent}")
-        print(f"⚡ Current Job Rate: {self.current_job_rate} jobs/min")
+        print(f"⚡ Current Job Delay: {self.current_delay_seconds} seconds")
         
-        if self.current_uptime_info:
+        if self.current_gpu_info:
             print(f"\n🖥️  GPU STATUS (via Ollama)")
             print("-" * 40)
-            print(f"  🆔 Agent ID: {self.current_uptime_info.agent_id}")
-            print(f"  🤖 Model: {self.current_uptime_info.model_name}")
-            print(f"  💾 VRAM Usage: {self.current_uptime_info.vram_usage_mb:.0f} MB ({self.current_uptime_info.vram_usage_mb/1024:.2f} GB)")
-            print(f"  📊 GPU Score: {self.current_uptime_info.uptime_percent:.2f}%")
-            print(f"  🖥️  GPU Available: {'Yes' if self.current_uptime_info.gpu_available else 'No'}")
-            print(f"  📚 Total Models: {self.current_uptime_info.total_models}")
-            print(f"  🕐 Last Check: {self.current_uptime_info.last_check.strftime('%H:%M:%S')}")
+            print(f"  🆔 Agent ID: {self.current_gpu_info.agent_id}")
+            print(f"  🤖 VRAM: {self.current_gpu_info.vram_available_gb:.2f} GB")
+            print(f"  🤖 Models: {self.current_gpu_info.models_loaded}")
+            print(f"  🤖 GPU Available: {'Yes' if self.current_gpu_info.gpu_available else 'No'}")
             
         for capability, stats in self.stats.items():
             print(f"\n🎯 {capability.upper()}")
@@ -391,7 +349,6 @@ class UptimeAwareCapabilityTester:
             print(f"  📈 Success Rate: {summary['success_rate']}")
             if summary['avg_response_time'] != "N/A":
                 print(f"  ⏱️  Avg Response Time: {summary['avg_response_time']}")
-                print(f"  🏃 Min/Max: {summary['min_response_time']} / {summary['max_response_time']}")
             print(f"  📊 Status Codes: {summary['status_codes']}")
             
             if summary['recent_errors']:
@@ -405,24 +362,23 @@ def signal_handler(signum, frame):
 async def main():
     """Main entry point with argument parsing"""
     parser = argparse.ArgumentParser(
-        description="Modified Uptime-Aware Capability Tester - Queries GPU status directly from worker",
+        description="VRAM-Aware Capability Tester - Real VRAM-based job delay logic",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Test with 60 jobs/min base rate for agent-001
-  python modified_uptime_aware_capability_tester.py --agent agent-001 --rate 60
+  python single_orchestrator_tester.py --agent agent-001 --rate 60
   
   # Test multiple capabilities
-  python modified_uptime_aware_capability_tester.py --agent agent-001 --rate 30 --capabilities gpu-check text-to-image
+  python single_orchestrator_tester.py --agent agent-001 --rate 30 --capabilities gpu-check text-to-image
   
-  # Test with frequent uptime checks (every 10 seconds)
-  python modified_uptime_aware_capability_tester.py --agent agent-001 --rate 60 --uptime-interval 10
+  # Test with frequent GPU checks (every 10 seconds)  
+  python single_orchestrator_tester.py --agent agent-001 --rate 60 --uptime-interval 10
 
-Punishment Strategy:
-  - 99%+ uptime: 100% job rate (base rate)
-  - 95-99% uptime: 50% job rate  
-  - 90-95% uptime: 10% job rate
-  - <90% uptime: 0% job rate (full punishment)
+VRAM-Based Delay Logic:
+  - Case 2a: VRAM > 30GB + models loaded: No delay (full rate)
+  - Case 2b: VRAM < 30GB but > 1GB: 5 second delay between jobs
+  - Case 2b: VRAM < 1GB: 15 second delay between jobs
         """
     )
     
@@ -436,7 +392,7 @@ Punishment Strategy:
         '--rate',
         type=int,
         default=60,
-        help='Base jobs per minute for 99%+ uptime (default: 60)'
+        help='Base jobs per minute for Case 2a (VRAM>30GB+models) (default: 60)'
     )
     
     parser.add_argument(
@@ -449,15 +405,15 @@ Punishment Strategy:
     
     parser.add_argument(
         '--gateway-url',
-        default='http://localhost:8088',
-        help='Livepeer gateway URL (default: http://localhost:8088)'
+        default='http://localhost:9999',
+        help='Direct Livepeer gateway URL (default: http://localhost:9999, no Caddy)'
     )
     
     parser.add_argument(
         '--uptime-interval',
         type=int,
         default=30,
-        help='How often to query uptime in seconds (default: 30)'
+        help='How often to query GPU status in seconds (default: 30)'
     )
     
     args = parser.parse_args()
@@ -472,7 +428,7 @@ Punishment Strategy:
         capabilities=args.capabilities,
         target_agent_id=args.agent,
         gateway_url=args.gateway_url,
-        uptime_query_interval=args.uptime_interval
+        gpu_query_interval=args.uptime_interval
     )
     
     try:
