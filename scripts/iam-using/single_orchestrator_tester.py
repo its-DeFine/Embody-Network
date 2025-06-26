@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 CAPABILITIES = {
     "gpu-check": {
         "endpoint": "http://localhost:9999/process/request/agent-net",  # Direct gateway (no Caddy)
-        "capability_name": "agent-net", 
+        "capability_name": "Brad43679", 
         "run_command": "agent-net",
         "payload_generator": lambda agent_id: {
             "action": "gpu-check",
@@ -186,18 +186,21 @@ class UptimeAwareCapabilityTester:
         return base_interval + self.current_delay_seconds
         
     def create_livepeer_headers(self, capability_config: Dict[str, str]) -> Dict[str, str]:
-        """Create proper Livepeer headers for gateway requests"""
+        """Create proper Livepeer headers for gateway requests, including extra timeouts"""
         job_header = base64.b64encode(json.dumps({
             "request": json.dumps({"run": capability_config["run_command"]}),
             "parameters": json.dumps({}),
             "capability": capability_config["capability_name"],
-            "timeout_seconds": 30
+            "timeout_seconds": 60
         }).encode()).decode()
         
-        return {
+        headers = {
             'Content-Type': 'application/json',
-            'Livepeer': job_header
+            'Livepeer': job_header,
+            'Livepeer-Orch-Search-Timeout': '2s',
+            'Livepeer-Orch-Search-Resp-Timeout': '1s'
         }
+        return headers
         
     def make_single_request(self, capability_name: str) -> tuple:
         """Make a single request for a given capability"""

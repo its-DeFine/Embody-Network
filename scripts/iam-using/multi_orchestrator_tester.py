@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Multi-Orchestrator GPU-Aware Capability Tester
-Tests multiple orchestrators with different agents and applies punishment logic based on GPU/VRAM usage via Ollama.
+Modified Uptime-Aware Configurable Capability Tester for Livepeer Gateway
+Queries GPU uptime directly from worker endpoints instead of a separate ping system.
+Implements client-side punishment logic based on GPU uptime.
 """
 
 import requests
@@ -15,392 +16,434 @@ import signal
 import sys
 import asyncio
 import aiohttp
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
+capability_array = ["Brad43679", "Frank55522", "Kilout88820", "Navigare33399", "Vires11180", "Marco23467"]
 
-# Colors for terminal output
-GREEN = '\033[92m'
-YELLOW = '\033[93m'
-RED = '\033[91m'
-BLUE = '\033[94m'
-RESET = '\033[0m'
+# Configuration for different capabilities - generated from capability_array
+CAPABILITIES = {}
+for capability_name in capability_array:
+    CAPABILITIES[capability_name] = {
+        "endpoint": "http://localhost:9999/process/request/agent-net",  # Direct gateway (no Caddy)
+        "capability_name": capability_name, 
+        "run_command": "agent-net",
+        "payload_generator": lambda agent_id, cap_name=capability_name: {
+            "action": "gpu-check",
+            "agent_id": agent_id,
+            "include_utilization": True,
+            "timestamp": time.time()
+        }
+    }
 
 @dataclass
-class OrchestratorConfig:
-    """Configuration for a single orchestrator"""
-    name: str
-    gateway_url: str
+class GPUInfo:
+    """Information about agent GPU status"""
     agent_id: str
+    vram_available_gb: float
+    vram_used_gb: float
+    vram_total_gb: float
+    models_loaded: int
+    model_names: List[str] = field(default_factory=list)
+    gpu_available: bool = True
+    last_check: datetime = None
+
+@dataclass 
+class RequestStats:
+    """Statistics for tracking request performance"""
+    total_requests: int = 0
+    successful_requests: int = 0
+    failed_requests: int = 0
+    delayed_requests: int = 0  # Requests not sent due to punishment
+    response_times: List[float] = field(default_factory=list)
+    status_codes: Dict[int, int] = field(default_factory=dict)
+    errors: List[str] = field(default_factory=list)
     
-@dataclass
-class JobResult:
-    """Result of a single job request"""
-    orchestrator: str
-    agent_id: str
-    capability: str
-    status_code: int
-    response_time: float
-    uptime_percent: float
-    timestamp: datetime
-    error: Optional[str] = None
-    model_name: Optional[str] = None
-    vram_mb: Optional[float] = None
+    def add_response(self, status_code: int, response_time: float, error: str = None):
+        """Add a response to the statistics"""
+        self.total_requests += 1
+        self.response_times.append(response_time)
+        self.status_codes[status_code] = self.status_codes.get(status_code, 0) + 1
+        
+        if status_code == 200:
+            self.successful_requests += 1
+        else:
+            self.failed_requests += 1
+            if error:
+                self.errors.append(error)
+                
+    def add_delayed(self):
+        """Record a delayed request due to punishment"""
+        self.delayed_requests += 1
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """Get a summary of the statistics"""
+        if not self.response_times and self.delayed_requests == 0:
+            return {"status": "no_requests"}
+            
+        total_attempted = len(self.response_times)
+        return {
+            "total_requests": self.total_requests,
+            "successful_requests": self.successful_requests,
+            "failed_requests": self.failed_requests,
+            "delayed_requests": self.delayed_requests,
+            "success_rate": f"{(self.successful_requests / max(total_attempted, 1) * 100):.2f}%" if total_attempted > 0 else "N/A",
+            "avg_response_time": f"{sum(self.response_times) / len(self.response_times):.2f}ms" if self.response_times else "N/A",
+            "min_response_time": f"{min(self.response_times):.2f}ms" if self.response_times else "N/A",
+            "max_response_time": f"{max(self.response_times):.2f}ms" if self.response_times else "N/A",
+            "status_codes": self.status_codes,
+            "recent_errors": self.errors[-5:] if self.errors else []
+        }
 
-class MultiOrchestratorTester:
-    """Tests multiple orchestrators with uptime-aware punishment logic"""
+class UptimeAwareCapabilityTester:
+    """Capability tester that adjusts job rate based on actual VRAM usage"""
     
     def __init__(self, 
-                 orchestrators: List[OrchestratorConfig],
-                 base_jobs_per_minute: int = 60,
-                 capabilities: List[str] = ["gpu-check"],
-                 test_duration: int = 60):
+                 base_jobs_per_minute: int,
+                 capabilities: List[str],
+                 target_agent_id: str,
+                 gateway_url: str = "http://localhost:9999",  # Direct gateway (no Caddy)
+                 gpu_query_interval: int = 30):
         """
-        Initialize the multi-orchestrator tester
+        Initialize the VRAM-aware tester
         
         Args:
-            orchestrators: List of orchestrator configurations
-            base_jobs_per_minute: Base job rate for 99%+ uptime
+            base_jobs_per_minute: Base job rate when VRAM > 30GB
             capabilities: List of capabilities to test
-            test_duration: How long to run the test (seconds)
+            target_agent_id: ID of the agent to monitor
+            gateway_url: URL of the Livepeer gateway
+            gpu_query_interval: How often to query GPU status (seconds)
         """
-        self.orchestrators = orchestrators
         self.base_jobs_per_minute = base_jobs_per_minute
         self.capabilities = capabilities
-        self.test_duration = test_duration
+        self.target_agent_id = target_agent_id
+        self.gateway_url = gateway_url.rstrip('/')
+        self.gpu_query_interval = gpu_query_interval
         
         self.running = True
-        self.results: List[JobResult] = []
-        self.agent_uptimes: Dict[str, float] = {}
-        self.agent_models: Dict[str, str] = {}
-        self.agent_vram: Dict[str, float] = {}
+        self.stats = {cap: RequestStats() for cap in capabilities}
+        self.current_gpu_info: Optional[GPUInfo] = None
+        self.current_delay_seconds = 0  # Additional delay between jobs
         self.start_time = time.time()
+        self.jobs_sent = 0
         
-    async def get_agent_uptime(self, orch: OrchestratorConfig) -> Tuple[float, str, float]:
-        """Query worker GPU check endpoint for GPU/VRAM status"""
+        # Validate capabilities
+        invalid_caps = [cap for cap in capabilities if cap not in CAPABILITIES]
+        if invalid_caps:
+            raise ValueError(f"Invalid capabilities: {invalid_caps}. Available: {list(CAPABILITIES.keys())}")
+            
+    async def get_agent_gpu_status_from_job_response(self, response_text: str) -> Optional[GPUInfo]:
+        """Extract GPU status from BYOC job response (eliminates duplicate monitoring calls)"""
         try:
-            async with aiohttp.ClientSession() as session:
-                # Query worker's GPU check endpoint through gateway
-                url = f"{orch.gateway_url.rstrip('/')}/worker/gpu-check"
-                payload = {"agent_id": orch.agent_id}
-                
-                async with session.post(url, json=payload, timeout=5) as resp:
-                    if resp.status != 200:
-                        print(f"{RED}❌ Failed to get GPU status for {orch.name}: HTTP {resp.status}{RESET}")
-                        return 85.0, "No GPU data", 0.0  # Default to low uptime
+            data = json.loads(response_text)
+            
+            # Extract actual VRAM usage by models (keep in MB)
+            vram_usage_mb = data.get('vram_usage_mb', 0.0)
+            
+            model_name = data.get('model_name', '')
+            model_names = [model_name] if model_name else []
+            
+            return GPUInfo(
+                agent_id=data.get('agent_id', self.target_agent_id),
+                vram_available_gb=vram_usage_mb,  # Actually MB, but keeping field name for compatibility
+                vram_used_gb=vram_usage_mb,       # Actually MB, but keeping field name for compatibility  
+                vram_total_gb=vram_usage_mb,      # Actually MB, but keeping field name for compatibility
+                models_loaded=data.get('total_models', 0),
+                model_names=model_names,
+                gpu_available=data.get('gpu_count', 0) > 0,
+                last_check=datetime.now()
+            )
                         
-                    data = await resp.json()
-                    
-                    # Extract data from response
-                    uptime = data.get('uptime_percent', 85.0)
-                    model_name = data.get('model_name', 'Unknown')
-                    total_vram_mb = data.get('vram_usage_mb', 0.0)
-                    
-                    key = f"{orch.name}:{orch.agent_id}"
-                    self.agent_uptimes[key] = uptime
-                    self.agent_models[key] = model_name
-                    self.agent_vram[key] = total_vram_mb
-                    return uptime, model_name, total_vram_mb
-                    
         except Exception as e:
-            print(f"{RED}❌ Error querying GPU status for {orch.name}: {e}{RESET}")
-            return 85.0, "Error", 0.0
+            print(f"❌ Error parsing GPU status from job response: {e}")
+            return None
             
-    def calculate_job_rate(self, uptime_percent: float) -> int:
-        """Calculate jobs per minute based on uptime percentage"""
-        if uptime_percent >= 99.0:
-            return self.base_jobs_per_minute
-        elif uptime_percent >= 95.0:
-            return int(self.base_jobs_per_minute * 0.5)
-        elif uptime_percent >= 90.0:
-            return int(self.base_jobs_per_minute * 0.1)
+    def calculate_delay(self, gpu_info: GPUInfo) -> float:
+        """
+        Calculate additional delay based on model VRAM usage (in MB)
+        
+        Case 2a: Models using > 30,000MB VRAM and models exist -> no delay (big models get priority)
+        Case 2b: Models using < 30,000MB VRAM -> add delay (small models get delayed)
+        """
+        model_vram_usage_mb = gpu_info.vram_used_gb  # Actually MB despite field name
+        
+        if model_vram_usage_mb > 30000.0 and gpu_info.models_loaded > 0:
+            # Case 2a: Big models (>30GB = 30,000MB) get priority - no delay
+            return 0.0
         else:
-            return 0
-            
-    def create_livepeer_headers(self, capability: str) -> Dict[str, str]:
-        """Create proper Livepeer headers for gateway requests"""
+            # Case 2b: Small models get delayed
+            if model_vram_usage_mb > 1000.0:
+                # Medium models (1-30GB = 1,000-30,000MB) get moderate delay
+                return 5.0  # 5 second delay
+            else:
+                # Tiny models (<1GB = <1,000MB) get longer delay
+                return 15.0  # 15 second delay
+                
+    def get_job_interval(self) -> float:
+        """Calculate total interval between jobs (base rate + VRAM delay)"""
+        base_interval = 60.0 / self.base_jobs_per_minute
+        return base_interval + self.current_delay_seconds
+        
+    def create_livepeer_headers(self, capability_config: Dict[str, str]) -> Dict[str, str]:
+        """Create proper Livepeer headers for gateway requests, including extra timeouts"""
         job_header = base64.b64encode(json.dumps({
-            "request": json.dumps({"run": "agent-net"}),
+            "request": json.dumps({"run": capability_config["run_command"]}),
             "parameters": json.dumps({}),
-            "capability": "agent-net",
-            "timeout_seconds": 30
+            "capability": capability_config["capability_name"],
+            "timeout_seconds": 60
         }).encode()).decode()
         
-        return {
+        headers = {
             'Content-Type': 'application/json',
-            'Livepeer': job_header
+            'Livepeer': job_header,
+            'Livepeer-Orch-Search-Timeout': '2s',
+            'Livepeer-Orch-Search-Resp-Timeout': '1s'
         }
+        return headers
         
-    async def send_job(self, orch: OrchestratorConfig, capability: str, uptime: float, model_name: str, vram_mb: float) -> JobResult:
-        """Send a single job to an orchestrator"""
+    def make_single_request(self, capability_name: str) -> tuple:
+        """Make a single request for a given capability"""
         start_time = time.time()
         
         try:
-            headers = self.create_livepeer_headers(capability)
-            payload = {
-                "action": "gpu-check",
-                "agent_id": orch.agent_id,
-                "include_utilization": True,
-                "timestamp": time.time()
-            }
+            capability_config = CAPABILITIES[capability_name]
+            headers = self.create_livepeer_headers(capability_config)
+            payload = capability_config["payload_generator"](self.target_agent_id)
             
-            async with aiohttp.ClientSession() as session:
-                url = f"{orch.gateway_url}/gateway/process/request/agent-net"
-                
-                async with session.post(url, headers=headers, json=payload, timeout=25) as resp:
-                    response_time = (time.time() - start_time) * 1000
-                    
-                    return JobResult(
-                        orchestrator=orch.name,
-                        agent_id=orch.agent_id,
-                        capability=capability,
-                        status_code=resp.status,
-                        response_time=response_time,
-                        uptime_percent=uptime,
-                        timestamp=datetime.now(),
-                        error=None if resp.status == 200 else f"HTTP {resp.status}",
-                        model_name=model_name,
-                        vram_mb=vram_mb
-                    )
-                    
-        except asyncio.TimeoutError:
-            response_time = (time.time() - start_time) * 1000
-            return JobResult(
-                orchestrator=orch.name,
-                agent_id=orch.agent_id,
-                capability=capability,
-                status_code=0,
-                response_time=response_time,
-                uptime_percent=uptime,
-                timestamp=datetime.now(),
-                error="Request timeout",
-                model_name=model_name,
-                vram_mb=vram_mb
+            print(f"🔍 JOB REQUEST: {capability_config['endpoint']}")
+            print(f"📦 Payload: {payload}")
+            print(f"📋 Headers: {headers}")
+            
+            response = requests.post(
+                capability_config["endpoint"],
+                headers=headers,
+                json=payload,
+                timeout=25
             )
             
-        except Exception as e:
-            response_time = (time.time() - start_time) * 1000
-            return JobResult(
-                orchestrator=orch.name,
-                agent_id=orch.agent_id,
-                capability=capability,
-                status_code=-1,
-                response_time=response_time,
-                uptime_percent=uptime,
-                timestamp=datetime.now(),
-                error=str(e),
-                model_name=model_name,
-                vram_mb=vram_mb
+            print(f"📥 JOB RESPONSE: Status={response.status_code}, Body={response.text[:200]}...")
+            
+            response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+            
+            # Return response data - GPU status will be extracted in the main loop
+            
+            return (
+                response.status_code,
+                response_time,
+                response.text if response.status_code != 200 else None,
+                payload,
+                response.text if response.status_code == 200 else None  # Add successful response data
             )
             
-    async def run_test_loop(self):
-        """Main test loop that sends jobs to multiple orchestrators"""
-        print(f"\n{BLUE}🚀 MULTI-ORCHESTRATOR UPTIME-AWARE TEST STARTED{RESET}")
-        print(f"📦 Base Job Rate: {self.base_jobs_per_minute} jobs/min")
-        print(f"🎪 Capabilities: {', '.join(self.capabilities)}")
-        print(f"⏱️  Test Duration: {self.test_duration} seconds")
-        print(f"🌐 Orchestrators: {len(self.orchestrators)}")
-        for orch in self.orchestrators:
-            print(f"   - {orch.name}: {orch.gateway_url} (Agent: {orch.agent_id})")
+        except requests.exceptions.Timeout:
+            response_time = (time.time() - start_time) * 1000
+            return (0, response_time, "Request timeout", {}, None)
+            
+        except requests.exceptions.RequestException as e:
+            response_time = (time.time() - start_time) * 1000
+            return (-1, response_time, str(e), {}, None)
+            
+    # GPU monitoring eliminated - we get GPU status from each job response instead
+            
+    async def run_job_loop(self):
+        """Main loop that sends jobs with VRAM-based delay logic (GPU data from job responses)"""
+        print(f"\n🚀 MULTI-CAPABILITY VRAM-AWARE TESTER STARTED")
+        print(f"🎯 Target Agent: {self.target_agent_id}")
+        print(f"📦 Job Rate: {self.base_jobs_per_minute} jobs/min PER capability")
+        print(f"🎪 Capabilities: {', '.join(self.capabilities)} ({len(self.capabilities)} total)")
+        print(f"📊 Total Rate: {self.base_jobs_per_minute * len(self.capabilities)} jobs/min (all capabilities combined)")
+        print(f"🧠 Logic: Case 2a (VRAM>30GB+models): No delay | Case 2b (other): Add delay")
+        print(f"🔄 GPU Status: Extracted from each job response (no separate monitoring)")
         print("=" * 80)
         
-        # Initial GPU check for all orchestrators
-        print(f"\n{YELLOW}Checking initial GPU status (via Ollama) for all agents...{RESET}")
-        for orch in self.orchestrators:
-            gpu_score, model_name, vram_mb = await self.get_agent_uptime(orch)
-            job_rate = self.calculate_job_rate(gpu_score)
-            print(f"  {orch.name} ({orch.agent_id}): {model_name} | {vram_mb:.0f}MB VRAM | {gpu_score:.1f}% score → {job_rate} jobs/min")
-        
-        print(f"\n{GREEN}Starting job distribution...{RESET}")
-        print(f"{BLUE}💡 VRAM Mapping: <2GB=99.5%, 2-4GB=98%, 4-6GB=92%, >6GB=85%{RESET}")
-        print("=" * 80)
-        
-        # Track job counts per orchestrator
-        job_counts = {orch.name: 0 for orch in self.orchestrators}
-        last_uptime_check = time.time()
-        
-        while self.running and (time.time() - self.start_time) < self.test_duration:
-            # Refresh uptime every 30 seconds
-            if time.time() - last_uptime_check > 30:
-                for orch in self.orchestrators:
-                    _, _, _ = await self.get_agent_uptime(orch)
-                last_uptime_check = time.time()
+        try:
+            # Start with no additional delay - use base rate until GPU data is available
+            self.current_delay_seconds = 0.0  # No delay initially, will update from first job response
+            print(f"\n⏳ Initial delay: {self.current_delay_seconds}s (will update from first job response)")
             
-            # Select orchestrators that can receive jobs based on uptime
-            eligible_orchestrators = []
-            for orch in self.orchestrators:
-                uptime = self.agent_uptimes.get(f"{orch.name}:{orch.agent_id}", 0)
-                job_rate = self.calculate_job_rate(uptime)
-                if job_rate > 0:
-                    # Add orchestrator multiple times based on its rate ratio
-                    weight = int(job_rate / 10)  # Normalize to make selection fair
-                    eligible_orchestrators.extend([orch] * max(1, weight))
-            
-            if not eligible_orchestrators:
-                print(f"\n{RED}⚠️  No orchestrators eligible for jobs (all have low GPU scores){RESET}")
-                await asyncio.sleep(5)
-                continue
-            
-            # Select a random orchestrator from eligible ones
-            selected_orch = random.choice(eligible_orchestrators)
-            capability = random.choice(self.capabilities)
-            
-            # Get current GPU info for the selected orchestrator
-            key = f"{selected_orch.name}:{selected_orch.agent_id}"
-            uptime = self.agent_uptimes.get(key, 0)
-            model_name = self.agent_models.get(key, "Unknown")
-            vram_mb = self.agent_vram.get(key, 0.0)
-            job_rate = self.calculate_job_rate(uptime)
-            
-            # Send the job
-            result = await self.send_job(selected_orch, capability, uptime, model_name, vram_mb)
-            self.results.append(result)
-            job_counts[selected_orch.name] += 1
-            
-            # Log the result
-            status_emoji = "✅" if result.status_code == 200 else "❌"
-            print(f"{status_emoji} [{datetime.now().strftime('%H:%M:%S')}] "
-                  f"{selected_orch.name}: {result.status_code} ({result.response_time:.0f}ms) | "
-                  f"Model: {model_name} | VRAM: {vram_mb:.0f}MB | Rate: {job_rate}/min")
-            
-            # Calculate delay based on aggregate job rate
-            total_job_rate = sum(self.calculate_job_rate(u) for u in self.agent_uptimes.values())
-            if total_job_rate > 0:
-                delay = 60.0 / total_job_rate
-            else:
-                delay = 5.0  # Default delay if no jobs allowed
+            while self.running:
+                # Calculate delay between jobs
+                delay_seconds = self.get_job_interval()
+                base_interval = 60.0 / self.base_jobs_per_minute
+                print(f"🕐 Timing: Base interval={base_interval:.1f}s + VRAM delay={self.current_delay_seconds:.1f}s = Total={delay_seconds:.1f}s")
                 
-            await asyncio.sleep(delay)
-        
-        print(f"\n{GREEN}Test completed!{RESET}")
-        self.print_summary(job_counts)
-        
-    def print_summary(self, job_counts: Dict[str, int]):
-        """Print test summary and statistics"""
-        print(f"\n{BLUE}📊 TEST SUMMARY{RESET}")
+                # Send jobs to ALL capabilities simultaneously
+                for capability in self.capabilities:
+                    # Make the request
+                    status_code, response_time, error, payload, success_response = self.make_single_request(capability)
+                    self.stats[capability].add_response(status_code, response_time, error)
+                    self.jobs_sent += 1
+                    
+                    # Extract GPU data from successful responses (eliminating separate monitoring)
+                    if status_code == 200 and success_response:
+                        gpu_info = await self.get_agent_gpu_status_from_job_response(success_response)
+                        if gpu_info:
+                            old_delay = self.current_delay_seconds
+                            self.current_gpu_info = gpu_info
+                            self.current_delay_seconds = self.calculate_delay(gpu_info)
+                            if old_delay != self.current_delay_seconds:
+                                print(f"📊 Delay updated from job response: {old_delay}s → {self.current_delay_seconds}s")
+                                case_status = "2a" if self.current_delay_seconds == 0 else "2b"
+                                print(f"   VRAM: {gpu_info.vram_used_gb:.0f}MB, Models: {gpu_info.models_loaded} (Case {case_status})")
+                    
+                    # Log result for this capability
+                    if status_code == 200:
+                        status_emoji = "✅"
+                    else:
+                        status_emoji = "❌"
+                        
+                    # Display current status for this capability
+                    if self.current_gpu_info:
+                        model_names = ', '.join(self.current_gpu_info.model_names)
+                        vram_display = f"{self.current_gpu_info.vram_used_gb:.0f}MB"
+                    else:
+                        model_names = "Waiting for data..."
+                        vram_display = "Unknown"
+                        
+                    print(f"{status_emoji} [{datetime.now().strftime('%H:%M:%S')}] {capability}: "
+                          f"{status_code} ({response_time:.0f}ms) | "
+                          f"Delay: {self.current_delay_seconds}s | "
+                          f"VRAM: {vram_display} | "
+                          f"Models: {model_names}")
+                
+                # Print statistics periodically
+                if self.jobs_sent % 50 == 0:
+                    self.print_statistics()
+                    
+                # Wait before next job
+                await asyncio.sleep(delay_seconds)
+                
+        except KeyboardInterrupt:
+            print("\n🛑 Received interrupt signal")
+        finally:
+            self.running = False
+                
+    def print_statistics(self):
+        """Print current statistics"""
+        print(f"\n📊 STATISTICS SUMMARY")
         print("=" * 80)
         
-        total_duration = time.time() - self.start_time
-        total_jobs = len(self.results)
+        total_time = time.time() - self.start_time
+        print(f"🕐 Total Runtime: {total_time:.1f}s")
+        print(f"📤 Total Jobs Sent: {self.jobs_sent}")
+        print(f"⚡ Current Job Delay: {self.current_delay_seconds} seconds")
         
-        print(f"⏱️  Total Duration: {total_duration:.1f} seconds")
-        print(f"📤 Total Jobs Sent: {total_jobs}")
-        print(f"📊 Average Rate: {(total_jobs / total_duration * 60):.1f} jobs/min")
-        
-        # Per-orchestrator statistics
-        print(f"\n{YELLOW}Per-Orchestrator Statistics:{RESET}")
-        for orch in self.orchestrators:
-            orch_results = [r for r in self.results if r.orchestrator == orch.name]
-            if not orch_results:
-                print(f"\n  {orch.name}: No jobs sent")
+        if self.current_gpu_info:
+            print(f"\n🖥️  GPU STATUS (via Ollama)")
+            print("-" * 40)
+            print(f"  🆔 Agent ID: {self.current_gpu_info.agent_id}")
+            print(f"  🤖 VRAM: {self.current_gpu_info.vram_available_gb:.2f} GB")
+            print(f"  🤖 Models: {self.current_gpu_info.models_loaded}")
+            print(f"  🤖 GPU Available: {'Yes' if self.current_gpu_info.gpu_available else 'No'}")
+            
+        for capability, stats in self.stats.items():
+            print(f"\n🎯 {capability.upper()}")
+            print("-" * 40)
+            summary = stats.get_summary()
+            
+            if summary.get("status") == "no_requests":
+                print("  📭 No requests sent yet")
                 continue
                 
-            successful = sum(1 for r in orch_results if r.status_code == 200)
-            avg_response_time = sum(r.response_time for r in orch_results) / len(orch_results)
-            key = f"{orch.name}:{orch.agent_id}"
-            uptime = self.agent_uptimes.get(key, 0)
-            model = self.agent_models.get(key, "Unknown")
-            vram = self.agent_vram.get(key, 0.0)
+            print(f"  📤 Total Attempts: {summary['total_requests']}")
+            print(f"  ✅ Successful: {summary['successful_requests']}")
+            print(f"  ❌ Failed: {summary['failed_requests']}")
+            print(f"  ⏳ Delayed (Punished): {summary['delayed_requests']}")
+            print(f"  📈 Success Rate: {summary['success_rate']}")
+            if summary['avg_response_time'] != "N/A":
+                print(f"  ⏱️  Avg Response Time: {summary['avg_response_time']}")
+            print(f"  📊 Status Codes: {summary['status_codes']}")
             
-            print(f"\n  {orch.name} ({orch.agent_id}):")
-            print(f"    Model: {model}")
-            print(f"    VRAM: {vram:.0f} MB")
-            print(f"    GPU Score: {uptime:.1f}%")
-            print(f"    Jobs Sent: {len(orch_results)}")
-            print(f"    Successful: {successful} ({(successful/len(orch_results)*100):.1f}%)")
-            print(f"    Avg Response: {avg_response_time:.1f}ms")
-            print(f"    Job Rate: {(len(orch_results) / total_duration * 60):.1f} jobs/min")
-            
-        # Punishment effectiveness
-        print(f"\n{YELLOW}Punishment Effectiveness:{RESET}")
-        for orch in self.orchestrators:
-            uptime = self.agent_uptimes.get(f"{orch.name}:{orch.agent_id}", 0)
-            expected_rate = self.calculate_job_rate(uptime)
-            actual_jobs = job_counts.get(orch.name, 0)
-            actual_rate = (actual_jobs / total_duration * 60)
-            
-            print(f"  {orch.name}: Expected {expected_rate} jobs/min, Actual {actual_rate:.1f} jobs/min")
-
-def parse_orchestrator_config(config_str: str) -> OrchestratorConfig:
-    """Parse orchestrator configuration from string format: name,url,agent_id"""
-    parts = config_str.split(',')
-    if len(parts) != 3:
-        raise ValueError(f"Invalid orchestrator config: {config_str}. Expected format: name,url,agent_id")
-    return OrchestratorConfig(name=parts[0], gateway_url=parts[1], agent_id=parts[2])
-
+            if summary['recent_errors']:
+                print(f"  🚨 Recent Errors: {summary['recent_errors']}")
+                
+def signal_handler(signum, frame):
+    """Handle interrupt signals gracefully"""
+    print(f"\n🛑 Received signal {signum}")
+    sys.exit(0)
+    
 async def main():
     """Main entry point with argument parsing"""
     parser = argparse.ArgumentParser(
-        description="Multi-Orchestrator Uptime-Aware Capability Tester",
+        description="Multi-Capability VRAM-Aware Tester - Sends jobs to multiple capabilities simultaneously",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Test two orchestrators with different agents
-  python multi_orchestrator_tester.py \\
-    --orchestrators "orch1,http://localhost:8088,agent-001" \\
-                   "orch2,http://localhost:8089,agent-002"
+  # Test all capabilities with 1 job/min each for agent-001
+  python multi_orchestrator_tester.py --agent 1 --rate 1
   
-  # Test with custom job rate and duration
-  python multi_orchestrator_tester.py \\
-    --orchestrators "prod,http://prod.example.com:8088,agent-001" \\
-                   "staging,http://staging.example.com:8088,agent-002" \\
-    --rate 120 --duration 300
+  # Test with higher rate (2 jobs/min per capability)
+  python multi_orchestrator_tester.py --agent 1 --rate 2
+  
+  # Test specific capabilities only
+  python multi_orchestrator_tester.py --agent 1 --capabilities Brad43679 Frank55522
 
-Format for orchestrators: name,gateway_url,agent_id
+Multi-Capability Logic:
+  - Sends jobs to ALL selected capabilities simultaneously
+  - Each capability gets called at the specified rate (e.g., 1/min each)
+  - Default capabilities: Brad43679, Frank55522, kilout88820
+
+VRAM-Based Delay Logic:
+  - Case 2a: VRAM > 30GB + models loaded: No delay (full rate)
+  - Case 2b: VRAM < 30GB but > 1GB: 5 second delay between jobs
+  - Case 2b: VRAM < 1GB: 15 second delay between jobs
         """
     )
     
     parser.add_argument(
-        '--orchestrators',
-        nargs='+',
+        '--agent',
         required=True,
-        help='Orchestrator configurations (format: name,url,agent_id)'
+        help='Target agent ID to monitor'
     )
     
     parser.add_argument(
         '--rate',
         type=int,
-        default=60,
-        help='Base jobs per minute for 99%+ uptime (default: 60)'
-    )
-    
-    parser.add_argument(
-        '--duration',
-        type=int,
-        default=60,
-        help='Test duration in seconds (default: 60)'
+        default=10,
+        help='Base jobs per minute per capability for Case 2a (VRAM>30GB+models) (default: 10)'
     )
     
     parser.add_argument(
         '--capabilities',
         nargs='+',
-        default=['gpu-check'],
-        help='Capabilities to test (default: gpu-check)'
+        default=capability_array,  # Use all capabilities by default
+        choices=list(CAPABILITIES.keys()),
+        help=f'Capabilities to test (choices: {list(CAPABILITIES.keys())})'
+    )
+    
+    parser.add_argument(
+        '--gateway-url',
+        default='http://localhost:9999',
+        help='Direct Livepeer gateway URL (default: http://localhost:9999, no Caddy)'
+    )
+    
+    parser.add_argument(
+        '--uptime-interval',
+        type=int,
+        default=30,
+        help='How often to query GPU status in seconds (default: 30)'
     )
     
     args = parser.parse_args()
     
-    # Parse orchestrator configurations
-    try:
-        orchestrators = [parse_orchestrator_config(c) for c in args.orchestrators]
-    except ValueError as e:
-        print(f"{RED}Error: {e}{RESET}")
-        sys.exit(1)
+    # Set up signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
     # Create and run the tester
-    tester = MultiOrchestratorTester(
-        orchestrators=orchestrators,
+    tester = UptimeAwareCapabilityTester(
         base_jobs_per_minute=args.rate,
         capabilities=args.capabilities,
-        test_duration=args.duration
+        target_agent_id=args.agent,
+        gateway_url=args.gateway_url,
+        gpu_query_interval=args.uptime_interval
     )
     
     try:
-        await tester.run_test_loop()
-    except KeyboardInterrupt:
-        print(f"\n{RED}Test interrupted by user{RESET}")
-        tester.running = False
+        await tester.run_job_loop()
+    finally:
+        tester.print_statistics()
 
 if __name__ == "__main__":
     asyncio.run(main())
