@@ -70,10 +70,33 @@ services:
       - "CAPABILITY_NAME=agent-net"
       - "CAPABILITY_DESCRIPTION=Agent network capability with GPU uptime monitoring"
       - "CAPABILITY_URL=http://worker:9876"
-      - "CAPABILITY_PRICE_PER_UNIT=0 "
+      - "CAPABILITY_PRICE_PER_UNIT=29000000000000"
       - "CAPABILITY_PRICE_SCALING=1"
       - "CAPABILITY_CAPACITY=10"
       - "PYTHONUNBUFFERED=1"
+
+  
+  orchestrator:
+    image: livepeer/go-livepeer:sha-5627b90 # need to verify with Brad if this needs to be updated
+    container_name: byoc-orchestrator-test
+    volumes:
+      - ./data/orchestrator:/data
+    ports:
+      - 9995:9995
+    command: ["-orchestrator",
+          "-orchSecret=orch-secret",
+          "-serviceAddr=orchestrator:9995",
+          "-v=6",
+          "-network=arbitrum-one-mainnet",
+          "-ethUrl=https://arb1.arbitrum.io/rpc",
+          "-ethPassword=",
+          "-dataDir=/data",
+          "-ethOrchAddr=",
+          "-pricePerUnit=100000000000000",
+          "-ticketEV=29000000000000",
+          "-maxFaceValue=1000000000000000",
+          "-autoAdjustPrice=false",
+          "-maxGasPrice=1000000000",]
 
     deploy:
       resources:
