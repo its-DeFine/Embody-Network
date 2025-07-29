@@ -16,6 +16,9 @@ from shared.models.agent_models import AgentConfig, AgentInstance, AgentStatus, 
 from shared.events.event_types import Event, EventType
 from shared.utils.message_queue import get_message_queue
 
+# Import GPU deployment handler
+from gpu_deployment import GPUDeploymentHandler
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,6 +33,7 @@ class AgentManager:
         self.agents: Dict[str, AgentInstance] = {}
         self.mq = None
         self.running = True
+        self.gpu_handler = GPUDeploymentHandler(redis_client)
         
     async def initialize(self, mq):
         """Initialize the agent manager"""
@@ -136,7 +140,61 @@ class AgentManager:
     async def create_agent_container(self, agent_config: AgentConfig):
         """Create and start a new agent container with retry logic"""
         try:
-            # Create container configuration
+            # Check if agent requires GPU
+            if await self.gpu_handler.is_gpu_required(agent_config.dict()):
+                # Check GPU availability
+                gpu_status = await self.gpu_handler.check_gpu_availability()
+                
+                if gpu_status.get('available'):
+                    # Deploy to GPU orchestrator
+                    logger.info(f"Deploying agent {agent_config.agent_id} to GPU orchestrator")
+                    
+                    deployment_result = await self.gpu_handler.deploy_to_gpu(agent_config.dict())
+                    
+                    if deployment_result['success']:
+                        # Create agent instance for GPU deployment
+                        instance = AgentInstance(
+                            agent_id=agent_config.agent_id,
+                            container_id=deployment_result['container_id'],
+                            status=AgentStatus.RUNNING,
+                            started_at=datetime.utcnow(),
+                            metadata={
+                                'deployment_type': 'gpu',
+                                'orchestrator_id': deployment_result['orchestrator_id'],
+                                'gpu_enabled': True,
+                                'model': deployment_result.get('model')
+                            }
+                        )
+                        
+                        # Store instance
+                        await self.redis.hset(
+                            f"agent_instance:{agent_config.agent_id}",
+                            mapping=instance.dict()
+                        )
+                        
+                        self.agents[agent_config.agent_id] = instance
+                        
+                        # Publish GPU deployment event
+                        await self.mq.publish_event(Event(
+                            event_id=f"agent-gpu-deployed-{agent_config.agent_id}",
+                            event_type=EventType.AGENT_STARTED,
+                            source="agent-manager",
+                            customer_id=agent_config.customer_id,
+                            data={
+                                **instance.dict(),
+                                "deployment_type": "gpu",
+                                "orchestrator_id": deployment_result['orchestrator_id']
+                            }
+                        ))
+                        
+                        logger.info(f"Agent {agent_config.agent_id} deployed to GPU orchestrator")
+                        return
+                    else:
+                        logger.warning(f"GPU deployment failed: {deployment_result.get('error')}. Falling back to CPU.")
+                else:
+                    logger.warning(f"No GPU available. Deploying agent {agent_config.agent_id} to CPU container.")
+            
+            # Standard CPU container deployment
             container_name = f"agent-{agent_config.customer_id}-{agent_config.agent_id}"
             
             # Build environment variables
@@ -250,9 +308,17 @@ class AgentManager:
             return
         
         try:
-            container = self.docker.containers.get(instance.container_id)
-            # Increase timeout for complex agents
-            container.stop(timeout=60)
+            # Check if this is a GPU agent
+            metadata = instance.metadata if hasattr(instance, 'metadata') else {}
+            if metadata.get('deployment_type') == 'gpu':
+                # Deallocate from GPU orchestrator
+                await self.gpu_handler.deallocate_gpu_agent(agent_id)
+                logger.info(f"Deallocated GPU agent: {agent_id}")
+            else:
+                # Standard container stop
+                container = self.docker.containers.get(instance.container_id)
+                # Increase timeout for complex agents
+                container.stop(timeout=60)
             
             instance.status = AgentStatus.PAUSED
             

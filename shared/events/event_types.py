@@ -39,6 +39,15 @@ class EventType(str, Enum):
     ADMIN_BROADCAST = "admin.broadcast"
     ADMIN_KILLSWITCH = "admin.killswitch"
     ADMIN_AGENT_STOPPED = "admin.agent.stopped"
+    
+    # GPU Orchestrator events
+    ORCHESTRATOR_REGISTERED = "orchestrator.registered"
+    ORCHESTRATOR_HEALTH_CHECK = "orchestrator.health_check"
+    ORCHESTRATOR_HEALTH_UPDATE = "orchestrator.health_update"
+    ORCHESTRATOR_SHUTDOWN = "orchestrator.shutdown"
+    AGENT_DEPLOY_REQUEST = "agent.deploy_request"
+    AGENT_DEPLOYED = "agent.deployed"
+    AGENT_DEPLOYMENT_FAILED = "agent.deployment_failed"
 
 
 class Event(BaseModel):
