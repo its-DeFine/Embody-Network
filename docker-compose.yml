@@ -41,6 +41,23 @@ services:
       - redis
     restart: unless-stopped
 
+  # Control Board UI
+  control-board:
+    build:
+      context: ./control-board
+      dockerfile: Dockerfile
+    container_name: autogen-control-board
+    ports:
+      - "3001:80"
+    networks:
+      - autogen-network
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+    labels:
+      - "autogen.role=ui"
+      - "autogen.component=control-board"
+
   # Customer Agent Manager Service
   agent-manager:
     build:

@@ -110,6 +110,11 @@ services:
       - GPU_ENDPOINTS_ENABLED=true
       - GPU_ADAPTER_URL=http://orchestrator-adapter:8002
 
+  # Update control board to access GPU services
+  control-board:
+    depends_on:
+      - orchestrator-adapter
+
 volumes:
   ollama_models:
     driver: local
