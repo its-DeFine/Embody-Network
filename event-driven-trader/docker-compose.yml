@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  event-trader:
+    build: .
+    container_name: ai-event-driven-trader
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}  # Pass from host environment
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

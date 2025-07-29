@@ -1,0 +1,151 @@
+version: '3.8'
+
+services:
+  # Trading Agent Container (example)
+  trading-agent:
+    build:
+      context: ./customer_agents/base
+      dockerfile: Dockerfile
+    container_name: trading-agent-dual-mode
+    environment:
+      # JWT and Auth
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=HS256
+      
+      # RabbitMQ
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      
+      # Redis
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      
+      # Trading Mode Configuration
+      - TRADING_MODE=${TRADING_MODE:-comparison}
+      - COMPARISON_MODE=${COMPARISON_MODE:-true}
+      - COMPARISON_SYNC_PRICES=${COMPARISON_SYNC_PRICES:-true}
+      
+      # Hybrid Mode Settings
+      - HYBRID_REAL_WEIGHT=${HYBRID_REAL_WEIGHT:-0.1}
+      - HYBRID_SIM_WEIGHT=${HYBRID_SIM_WEIGHT:-0.9}
+      - HYBRID_REBALANCE_DAILY=${HYBRID_REBALANCE_DAILY:-true}
+      
+      # Simulation Configuration
+      - SIMULATION_INITIAL_BALANCE=${SIMULATION_INITIAL_BALANCE:-10000}
+      - SIMULATION_VOLATILITY=${SIMULATION_VOLATILITY:-1.0}
+      - SIMULATION_SLIPPAGE_BPS=${SIMULATION_SLIPPAGE_BPS:-10}
+      - SIMULATION_FEES=${SIMULATION_FEES:-0.001}
+      - SIMULATION_LATENCY_MS=${SIMULATION_LATENCY_MS:-50}
+      - SIMULATION_LIQUIDITY_FACTOR=${SIMULATION_LIQUIDITY_FACTOR:-1.0}
+      
+      # Advanced Simulation Features
+      - SIMULATION_BLACK_SWAN=${SIMULATION_BLACK_SWAN:-true}
+      - SIMULATION_MARKET_IMPACT=${SIMULATION_MARKET_IMPACT:-true}
+      - SIMULATION_ORDER_BOOK_SIM=${SIMULATION_ORDER_BOOK_SIM:-true}
+      - SIMULATION_PARTIAL_FILLS=${SIMULATION_PARTIAL_FILLS:-true}
+      
+      # Market Condition Simulation
+      - SIMULATION_MARKET_CONDITIONS=${SIMULATION_MARKET_CONDITIONS:-true}
+      - SIMULATION_FLASH_CRASH_PROB=${SIMULATION_FLASH_CRASH_PROB:-0.001}
+      - SIMULATION_LIQUIDITY_CRISIS=${SIMULATION_LIQUIDITY_CRISIS:-true}
+      
+      # Comparison Analytics
+      - COMPARISON_TRACK_DIVERGENCE=${COMPARISON_TRACK_DIVERGENCE:-true}
+      - COMPARISON_ALERT_THRESHOLD=${COMPARISON_ALERT_THRESHOLD:-0.05}
+      - COMPARISON_REPORT_INTERVAL=${COMPARISON_REPORT_INTERVAL:-3600}
+      
+      # Exchange Configuration
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+      - BINANCE_TESTNET=${BINANCE_TESTNET:-true}
+      
+      # Feature Flags
+      - ENABLE_TRADING=${ENABLE_TRADING:-false}
+      - ENABLE_TESTNET=${ENABLE_TESTNET:-true}
+      - ENABLE_PAPER_TRADING=${ENABLE_PAPER_TRADING:-true}
+      
+      # Agent Configuration
+      - AGENT_NAME=trading_agent_dual_mode
+      - AGENT_TYPE=trading
+      - LOG_LEVEL=INFO
+      
+    volumes:
+      - ./customer_agents/base:/app
+      - ./shared:/app/shared:ro
+      - agent_logs:/app/logs
+    networks:
+      - autogen-network
+    depends_on:
+      - rabbitmq
+      - redis
+    restart: unless-stopped
+    
+  # Test Runner Service
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: dual-mode-test-runner
+    environment:
+      - API_GATEWAY_URL=http://api-gateway:8000
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./scripts:/app/scripts
+      - ./test_results:/app/test_results
+    networks:
+      - autogen-network
+    depends_on:
+      - api-gateway
+      - trading-agent
+    command: python /app/scripts/test_dual_mode_trading.py
+    
+  # Comparison Report Generator
+  report-generator:
+    build:
+      context: ./customer_agents/base
+      dockerfile: Dockerfile
+    container_name: comparison-report-generator
+    environment:
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - REPORT_INTERVAL=${COMPARISON_REPORT_INTERVAL:-3600}
+      - OUTPUT_FORMAT=markdown
+    volumes:
+      - ./reports:/app/reports
+    networks:
+      - autogen-network
+    depends_on:
+      - redis
+    command: >
+      python -c "
+      import asyncio;
+      import os;
+      import sys;
+      from datetime import datetime;
+      sys.path.append('/app');
+      from comparison_reporter import ComparisonReporter;
+      
+      async def generate_reports():
+          reporter = ComparisonReporter();
+          while True:
+              try:
+                  report = reporter.generate_period_report([], 24);
+                  timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S');
+                  filename = f'/app/reports/comparison_report_{timestamp}.md';
+                  with open(filename, 'w') as f:
+                      f.write(reporter.export_report(report, 'markdown'));
+                  print(f'Report generated: {filename}');
+                  await asyncio.sleep(int(os.getenv('REPORT_INTERVAL', 3600)));
+              except Exception as e:
+                  print(f'Error generating report: {e}');
+                  await asyncio.sleep(60);
+      
+      asyncio.run(generate_reports());
+      "
+
+volumes:
+  agent_logs:
+  test_results:
+  reports:
+
+networks:
+  autogen-network:
+    external: true

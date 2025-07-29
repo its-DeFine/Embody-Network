@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # Core services only for swarm testing
+  redis:
+    image: redis:7-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - autogen-overlay
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: password
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - autogen-overlay
+
+  api-gateway:
+    image: autogen-api-gateway:latest
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    environment:
+      - REDIS_HOST=redis
+      - RABBITMQ_HOST=rabbitmq
+      - JWT_SECRET=test-secret
+      - RABBITMQ_USER=admin
+      - RABBITMQ_PASSWORD=password
+    ports:
+      - "8000:8000"
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+    networks:
+      - autogen-overlay
+
+  admin-control:
+    image: autogen-admin-control:latest
+    build:
+      context: .
+      dockerfile: services/admin-control/Dockerfile
+    environment:
+      - REDIS_HOST=redis
+      - RABBITMQ_HOST=rabbitmq
+      - ADMIN_API_KEY=admin-secret
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "8001:8001"
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+    networks:
+      - autogen-overlay
+
+networks:
+  autogen-overlay:
+    driver: overlay
+    attachable: true

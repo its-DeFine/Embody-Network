@@ -1,0 +1,237 @@
+version: '3.8'
+
+# Docker Swarm deployment configuration
+# Deploy with: docker stack deploy -c docker-compose.swarm.yml autogen-platform
+
+services:
+  # API Gateway for customer interactions (with replicas)
+  api-gateway:
+    image: ${REGISTRY_URL}/autogen/api-gateway:${VERSION:-latest}
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      placement:
+        constraints:
+          - node.role == worker
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    ports:
+      - target: 8000
+        published: 8000
+        protocol: tcp
+        mode: ingress  # Load balancing across replicas
+    environment:
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_FILE=/run/secrets/jwt_secret
+      - ADMIN_API_KEY_FILE=/run/secrets/admin_api_key
+      - SWARM_MODE=true
+    secrets:
+      - jwt_secret
+      - admin_api_key
+    networks:
+      - autogen-overlay
+    volumes:
+      - type: bind
+        source: ./shared
+        target: /app/shared
+        read_only: true
+
+  # Admin Control Service (single instance on manager node)
+  admin-control:
+    image: ${REGISTRY_URL}/autogen/admin-control:${VERSION:-latest}
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+    ports:
+      - target: 8001
+        published: 8001
+        protocol: tcp
+        mode: host  # Direct access, no load balancing
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - REDIS_URL=redis://redis:6379
+      - ADMIN_API_KEY_FILE=/run/secrets/admin_api_key
+    secrets:
+      - admin_api_key
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - autogen-overlay
+
+  # Agent Manager Service (one per node for local container management)
+  agent-manager:
+    image: ${REGISTRY_URL}/autogen/agent-manager:${VERSION:-latest}
+    deploy:
+      mode: global  # One instance per node
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    environment:
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - NODE_ID={{.Node.ID}}
+      - NODE_HOSTNAME={{.Node.Hostname}}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ./shared
+        target: /app/shared
+        read_only: true
+      - type: bind
+        source: ./customer_agents
+        target: /app/customer_agents
+    networks:
+      - autogen-overlay
+
+  # RabbitMQ with clustering support
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    deploy:
+      replicas: 1  # Can be increased with proper clustering config
+      placement:
+        constraints:
+          - node.labels.rabbitmq == true
+      restart_policy:
+        condition: on-failure
+    ports:
+      - target: 5672
+        published: 5672
+        protocol: tcp
+      - target: 15672
+        published: 15672
+        protocol: tcp
+    environment:
+      - RABBITMQ_DEFAULT_USER=rabbitmq
+      - RABBITMQ_DEFAULT_PASS_FILE=/run/secrets/rabbitmq_password
+      - RABBITMQ_ERLANG_COOKIE_FILE=/run/secrets/rabbitmq_erlang_cookie
+    secrets:
+      - rabbitmq_password
+      - rabbitmq_erlang_cookie
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - autogen-overlay
+
+  # Redis with Sentinel for HA
+  redis:
+    image: redis:7-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.redis == true
+      restart_policy:
+        condition: on-failure
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+    ports:
+      - target: 6379
+        published: 6379
+        protocol: tcp
+    volumes:
+      - redis_data:/data
+    networks:
+      - autogen-overlay
+
+  # Monitoring stack remains similar but with placement constraints
+  prometheus:
+    image: prom/prometheus:latest
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.monitoring == true
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - prometheus_data:/prometheus
+    networks:
+      - autogen-overlay
+    ports:
+      - target: 9090
+        published: 9090
+        protocol: tcp
+
+  grafana:
+    image: grafana/grafana:latest
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.monitoring == true
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_password
+    secrets:
+      - grafana_password
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - autogen-overlay
+    ports:
+      - target: 3000
+        published: 3000
+        protocol: tcp
+
+networks:
+  autogen-overlay:
+    driver: overlay
+    attachable: true
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
+
+volumes:
+  rabbitmq_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_SERVER},nolock,soft,rw
+      device: ":/data/rabbitmq"
+  redis_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_SERVER},nolock,soft,rw
+      device: ":/data/redis"
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+secrets:
+  jwt_secret:
+    external: true
+  admin_api_key:
+    external: true
+  rabbitmq_password:
+    external: true
+  rabbitmq_erlang_cookie:
+    external: true
+  grafana_password:
+    external: true
+
+configs:
+  prometheus_config:
+    file: ./monitoring/prometheus-swarm.yml

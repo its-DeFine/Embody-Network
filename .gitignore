@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+.venv
+
+# Logs
+logs/
+*.log
+trading_logs/
+trading_data/
+test_results/
+onboarding_reports/
+
+# Trading data
+trade_history_*.json
+live_trading_report_*.json
+dual_mode_*.json
+comparison_report_*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# Secrets
+secrets/
+*.key
+*.pem
+*.crt
+
+# Test outputs
+htmlcov/
+.coverage
+.pytest_cache/
+*.cover
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Temporary
+*.tmp
+*.bak
+/tmp/
+
+# Model files (large)
+*.gguf
+*.bin
+models/

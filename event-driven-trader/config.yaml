@@ -1,0 +1,98 @@
+# AI-Powered Event-Driven Trading System Configuration
+
+system:
+  loop_interval: 1  # Main loop runs every 1 second
+  log_level: INFO
+  enable_ai: true    # Enable AI AutoGen teams
+
+# AI and AutoGen configuration
+ai_config:
+  api_key: "${OPENAI_API_KEY}"  # Set via environment variable
+  model: "gpt-4"
+  temperature: 0.7
+  
+  # AutoGen team settings
+  teams:
+    market_analysis:
+      max_rounds: 5        # Max discussion rounds
+      min_confidence: 70   # Minimum confidence to act
+      
+    execution:
+      max_rounds: 4
+      min_confidence: 80
+
+trading:
+  starting_balance: 100.0
+  max_positions: 5
+  position_size_percent: 20  # % of available balance per trade
+  stop_loss_percent: 5
+  take_profit_percent: 10
+  
+  # AI-specific trading parameters
+  ai_override: true           # Allow AI to override parameters
+  max_ai_position_percent: 30 # Max position size for AI trades
+  ai_confidence_threshold: 70 # Minimum AI confidence to trade
+  
+events:
+  # Periodic events that run on fixed intervals
+  periodic:
+    # AI-powered market analysis
+    - name: ai_market_analysis
+      interval: 60  # Every minute for AI analysis
+      handler: AIMarketAnalysisHandler
+      enabled: true
+      
+    # Traditional handlers (now secondary)
+    - name: market_scan
+      interval: 120  # Less frequent, AI is primary
+      handler: MarketScanHandler
+      enabled: false  # Disabled by default when AI is active
+      
+    - name: position_monitor
+      interval: 10
+      handler: PositionMonitorHandler
+      enabled: true
+      
+    # AI performance review
+    - name: ai_performance_check
+      interval: 300  # 5 minutes
+      handler: AIPerformanceHandler
+      enabled: true
+      
+    # Automatic diagram updates (optional)
+    - name: diagram_update
+      interval: 600  # 10 minutes
+      handler: DiagramUpdateHandler
+      enabled: false  # Enable if you want automatic diagram updates
+  
+  # API monitors that check external conditions
+  api_monitors:
+    - name: price_monitor
+      endpoint: "https://api.coingecko.com/api/v3/simple/price"
+      params:
+        ids: "bitcoin,ethereum,arbitrum"
+        vs_currencies: "usd"
+        include_24hr_change: true
+      interval: 15  # Check every 15 seconds
+      conditions:
+        - field: "bitcoin.usd_24h_change"
+          operator: ">"
+          value: 3.0
+          handler: PriceSpikeHandler
+        - field: "ethereum.usd_24h_change"
+          operator: "<"
+          value: -3.0
+          handler: PriceCrashHandler
+      enabled: true
+
+# Tokens to trade
+tokens:
+  - symbol: BTC
+    coingecko_id: bitcoin
+    weight: 0.4  # Portfolio allocation weight
+  - symbol: ETH
+    coingecko_id: ethereum
+    weight: 0.3
+  - symbol: ARB
+    coingecko_id: arbitrum
+    weight: 0.3
