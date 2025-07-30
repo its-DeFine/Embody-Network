@@ -815,7 +815,13 @@ async def admin_login(
         with open('/run/secrets/admin_api_key', 'r') as f:
             admin_api_key = f.read().strip()
     except:
-        admin_api_key = os.getenv("ADMIN_API_KEY", "default_admin_key_change_me")
+        admin_api_key = os.getenv("ADMIN_API_KEY")
+        if not admin_api_key:
+            logger.error("ADMIN_API_KEY not configured for admin endpoint access")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Admin API key not configured"
+            )
     
     if api_key != admin_api_key:
         raise HTTPException(

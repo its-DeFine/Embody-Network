@@ -34,7 +34,11 @@ def get_admin_api_key():
         with open('/run/secrets/admin_api_key', 'r') as f:
             return f.read().strip()
     except:
-        return os.getenv("ADMIN_API_KEY", "default_admin_key_change_me")
+        api_key = os.getenv("ADMIN_API_KEY")
+        if not api_key:
+            logger.error("ADMIN_API_KEY not configured!")
+            raise ValueError("Admin API key must be configured via Docker secret or ADMIN_API_KEY environment variable")
+        return api_key
 
 ADMIN_API_KEY = get_admin_api_key()
 
