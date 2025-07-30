@@ -1,224 +1,43 @@
 version: '3.8'
 
 services:
-  # Core trading engine service
-  core-engine:
-    build:
-      context: ./services/core-engine
-      dockerfile: Dockerfile
-    container_name: trading-core-engine
-    environment:
-      - NODE_ENV=production
-      - RABBITMQ_URL=amqp://rabbitmq:5672
-      - REDIS_URL=redis://redis:6379
-    volumes:
-      - ./shared:/app/shared:ro
-    networks:
-      - autogen-network
-    depends_on:
-      - rabbitmq
-      - redis
-    restart: unless-stopped
-
-  # API Gateway for customer interactions
-  api-gateway:
-    build:
-      context: ./services/api-gateway
-      dockerfile: Dockerfile
-    container_name: api-gateway
+  app:
+    build: .
     ports:
       - "8000:8000"
     environment:
-      - RABBITMQ_URL=amqp://rabbitmq:5672
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET}
-    volumes:
-      - ./shared:/app/shared:ro
-    networks:
-      - autogen-network
+      - JWT_SECRET=${JWT_SECRET:-please-change-me}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
-      - rabbitmq
       - redis
-    restart: unless-stopped
-
-  # Control Board UI
-  control-board:
-    build:
-      context: ./control-board
-      dockerfile: Dockerfile
-    container_name: autogen-control-board
-    ports:
-      - "3001:80"
-    networks:
-      - autogen-network
-    depends_on:
-      - api-gateway
-    restart: unless-stopped
-    labels:
-      - "autogen.role=ui"
-      - "autogen.component=control-board"
-
-  # Customer Agent Manager Service
-  agent-manager:
-    build:
-      context: ./services/agent-manager
-      dockerfile: Dockerfile
-    container_name: agent-manager
-    environment:
-      - RABBITMQ_URL=amqp://rabbitmq:5672
-      - REDIS_URL=redis://redis:6379
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-      - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./shared:/app/shared:ro
-      - ./customer_agents:/app/customer_agents
     networks:
       - autogen-network
-    depends_on:
-      - rabbitmq
-      - redis
-    restart: unless-stopped
 
-  # OpenBB Adapter Service
-  openbb-adapter:
-    build:
-      context: .
-      dockerfile: services/openbb-adapter/Dockerfile
-    container_name: openbb-adapter
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - autogen-network
+
+  # Optional: OpenBB service for financial data
+  openbb:
+    build: ./app/openbb
     ports:
       - "8003:8003"
     environment:
       - REDIS_URL=redis://redis:6379
-      - RABBITMQ_URL=amqp://admin:password@rabbitmq:5672/
-      - CACHE_TTL=1800
-      - LOG_LEVEL=debug
-    volumes:
-      - ./services/openbb-adapter:/app:ro
-      - ./shared:/app/shared:ro
-    networks:
-      - autogen-network
     depends_on:
       - redis
-      - rabbitmq
-    restart: unless-stopped
-
-  # Update Pipeline Service
-  update-pipeline:
-    build:
-      context: ./services/update-pipeline
-      dockerfile: Dockerfile
-    container_name: update-pipeline
-    environment:
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - DOCKER_HOST=unix:///var/run/docker.sock
-      - RABBITMQ_URL=amqp://rabbitmq:5672
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./deployments:/app/deployments
     networks:
       - autogen-network
-    depends_on:
-      - rabbitmq
-    restart: unless-stopped
-
-  # RabbitMQ Message Queue
-  rabbitmq:
-    image: rabbitmq:3.12-management-alpine
-    container_name: rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-password}
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - autogen-network
-    restart: unless-stopped
-
-  # Redis for caching and session management
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    networks:
-      - autogen-network
-    restart: unless-stopped
-
-  # Monitoring - Prometheus
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    networks:
-      - autogen-network
-    restart: unless-stopped
-
-  # Monitoring - Grafana
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-    networks:
-      - autogen-network
-    depends_on:
-      - prometheus
-    restart: unless-stopped
-
-  # Log aggregation - Loki
-  loki:
-    image: grafana/loki:latest
-    container_name: loki
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
-      - loki_data:/loki
-    networks:
-      - autogen-network
-    restart: unless-stopped
-
-  # Log shipping - Promtail
-  promtail:
-    image: grafana/promtail:latest
-    container_name: promtail
-    volumes:
-      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
-      - /var/log:/var/log:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    networks:
-      - autogen-network
-    depends_on:
-      - loki
-    restart: unless-stopped
+    profiles:
+      - financial
 
 networks:
   autogen-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
-
-volumes:
-  rabbitmq_data:
-  redis_data:
-  prometheus_data:
-  grafana_data:
-  loki_data:

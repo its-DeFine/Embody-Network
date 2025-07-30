@@ -1,0 +1,68 @@
+"""Application configuration with validation"""
+from typing import Optional, List
+from pydantic import BaseSettings, validator
+import os
+
+class Settings(BaseSettings):
+    """Application settings with environment variable support"""
+    
+    # API Settings
+    api_title: str = "AutoGen Platform"
+    api_version: str = "1.0.0"
+    api_prefix: str = "/api/v1"
+    
+    # Security
+    jwt_secret: str
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24
+    admin_password: str
+    
+    # Redis
+    redis_url: str = "redis://localhost:6379"
+    redis_pool_size: int = 10
+    
+    # OpenBB
+    openbb_url: Optional[str] = None
+    openbb_api_key: Optional[str] = None
+    
+    # Docker
+    docker_network: str = "autogen-network"
+    agent_image: str = "autogen-agent:latest"
+    agent_memory_limit: str = "1g"
+    agent_cpu_limit: float = 1.0
+    
+    # Orchestrator
+    orchestrator_health_check_interval: int = 30
+    orchestrator_task_timeout: int = 300
+    max_retries: int = 3
+    
+    # Logging
+    log_level: str = "INFO"
+    log_format: str = "json"
+    
+    # Environment
+    environment: str = "development"
+    
+    @validator("jwt_secret")
+    def jwt_secret_required(cls, v):
+        if not v or v == "change-me-in-production":
+            raise ValueError("JWT_SECRET must be set to a secure value")
+        return v
+    
+    @validator("environment")
+    def environment_valid(cls, v):
+        allowed = ["development", "staging", "production"]
+        if v not in allowed:
+            raise ValueError(f"Environment must be one of: {allowed}")
+        return v
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+# Global settings instance
+settings = Settings()
+
+# Export common settings
+IS_PRODUCTION = settings.environment == "production"
+IS_DEVELOPMENT = settings.environment == "development"

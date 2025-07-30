@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black flake8 mypy
+    
+    - name: Lint with flake8
+      run: flake8 app/ tests/ --max-line-length=100
+    
+    - name: Format with black
+      run: black --check app/ tests/
+    
+    - name: Type check with mypy
+      run: mypy app/
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov
+    
+    - name: Run tests
+      run: |
+        pytest tests/ -v --cov=app --cov-report=xml
+      env:
+        REDIS_URL: redis://localhost:6379
+        JWT_SECRET: test-secret
+        ADMIN_PASSWORD: test-password
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build Docker image
+      run: docker build -t autogen-platform:test .
+    
+    - name: Run Docker container
+      run: |
+        docker run -d --name test-app \
+          -e JWT_SECRET=test-secret \
+          -e ADMIN_PASSWORD=test-password \
+          -p 8000:8000 \
+          autogen-platform:test
+    
+    - name: Health check
+      run: |
+        sleep 5
+        curl -f http://localhost:8000/health || exit 1
