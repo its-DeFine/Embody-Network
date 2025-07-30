@@ -8,11 +8,14 @@ Complete documentation for the AutoGen Platform - a lean, production-ready syste
 1. **[Main README](../README.md)** - Platform overview and quick start
 2. **[Quick Start Guide](./QUICK_START.md)** - Get running in 5 minutes
 3. **[User Guide](./USER_GUIDE.md)** - Complete usage documentation
+4. **[Control Board Guide](./CONTROL_BOARD_GUIDE.md)** - Web UI documentation
+5. **[OpenBB Integration Guide](./OPENBB_INTEGRATION_GUIDE.md)** - Using financial data in agents
 
 ### 🏗️ Architecture & Design
 1. **[Architecture Overview](./architecture/autogen-architecture.md)** - System design and components
 2. **[Platform Status](./PLATFORM_STATUS.md)** - Current capabilities and limitations
 3. **[Platform Enhancements](./PLATFORM_ENHANCEMENTS.md)** - Recent improvements
+4. **[OpenBB Integration Plan](./OPENBB_INTEGRATION_PLAN.md)** - Financial data integration design
 
 ### 🚢 Deployment & Operations
 1. **[Deployment Guide](./DEPLOYMENT_GUIDE.md)** - Production deployment instructions
@@ -37,10 +40,13 @@ docs/
 ├── INDEX.md                    # This file - documentation index
 ├── QUICK_START.md             # Getting started quickly
 ├── USER_GUIDE.md              # Complete user documentation
+├── CONTROL_BOARD_GUIDE.md     # Control Board UI guide
 ├── DEPLOYMENT_GUIDE.md        # Production deployment
 ├── PLATFORM_STATUS.md         # Current platform state
 ├── PLATFORM_ENHANCEMENTS.md   # Recent improvements
 ├── GPU_ORCHESTRATOR.md        # GPU support guide
+├── OPENBB_INTEGRATION_PLAN.md # OpenBB design document
+├── OPENBB_INTEGRATION_GUIDE.md # OpenBB usage guide
 ├── REAL_IMPLEMENTATIONS.md    # Production examples
 ├── AUTOGEN_TEST_RESULTS.md    # AutoGen test results
 ├── SWARM_TEST_RESULTS.md      # Swarm test results
@@ -53,6 +59,7 @@ docs/
 ### For Developers
 - [Architecture Overview](./architecture/autogen-architecture.md)
 - [API Documentation](http://localhost:8000/docs) (when running)
+- [OpenBB API Documentation](http://localhost:8003/docs) (when running)
 - [Test Guide](../tests/README.md)
 - [Makefile Commands](../Makefile)
 
@@ -65,6 +72,8 @@ docs/
 ### For Users
 - [Quick Start](./QUICK_START.md)
 - [User Guide](./USER_GUIDE.md)
+- [Control Board Guide](./CONTROL_BOARD_GUIDE.md)
+- [OpenBB Integration Guide](./OPENBB_INTEGRATION_GUIDE.md)
 - [Control Board UI](http://localhost:3001) (when running)
 
 ### For Maintainers
@@ -94,6 +103,12 @@ docs/
 
 ## 🆕 Recent Documentation Updates
 
+- **2025-07-30**: OpenBB Integration & Documentation Update
+  - Integrated OpenBB financial data platform
+  - Created comprehensive user guides
+  - Updated platform status documentation
+  - Added test suite documentation
+
 - **2025-07-30**: Major repository simplification
   - Consolidated docker-compose files
   - Archived overlapping projects
@@ -116,4 +131,5 @@ docs/
 
 **Last Updated**: 2025-07-30  
 **Maintainer**: Platform Team  
-**Version**: 1.0.0
+**Version**: 1.1.0  
+**Major Features**: GPU Orchestration, OpenBB Integration, Control Board UI
