@@ -13,7 +13,6 @@ import {
 import {
   Memory as MemoryIcon,
   SmartToy as SmartToyIcon,
-  Speed as SpeedIcon,
   Storage as StorageIcon,
   TrendingUp as TrendingUpIcon,
   CheckCircle as CheckCircleIcon,

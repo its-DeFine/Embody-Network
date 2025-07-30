@@ -10,12 +10,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Divider,
   Alert,
   Switch,
   FormControlLabel,
-  Card,
-  CardContent,
   List,
   ListItem,
   ListItemText,
@@ -26,8 +23,6 @@ import {
   Save as SaveIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
-  Key as KeyIcon,
-  CloudUpload as CloudUploadIcon,
 } from '@mui/icons-material'
 import { toast } from 'react-toastify'
 
@@ -54,8 +49,8 @@ const Settings: React.FC = () => {
       enableRiskLimits: true,
       stopLossPercentage: 5,
     },
-    orchestrators: [],
-    apiKeys: [],
+    orchestrators: [] as Array<{url: string; secret: string}>,
+    apiKeys: [] as Array<{exchange: string; key: string; secret: string}>,
   })
 
   const [newOrchestrator, setNewOrchestrator] = useState({
@@ -63,11 +58,11 @@ const Settings: React.FC = () => {
     secret: '',
   })
 
-  const [newApiKey, setNewApiKey] = useState({
-    exchange: '',
-    key: '',
-    secret: '',
-  })
+  // const [newApiKey, setNewApiKey] = useState({
+  //   exchange: '',
+  //   key: '',
+  //   secret: '',
+  // })
 
   const handleSaveSettings = () => {
     // In production, this would save to backend
@@ -85,16 +80,16 @@ const Settings: React.FC = () => {
     }
   }
 
-  const handleAddApiKey = () => {
-    if (newApiKey.exchange && newApiKey.key && newApiKey.secret) {
-      setSettings({
-        ...settings,
-        apiKeys: [...settings.apiKeys, newApiKey],
-      })
-      setNewApiKey({ exchange: '', key: '', secret: '' })
-      toast.success('API key added')
-    }
-  }
+  // const handleAddApiKey = () => {
+  //   if (newApiKey.exchange && newApiKey.key && newApiKey.secret) {
+  //     setSettings({
+  //       ...settings,
+  //       apiKeys: [...settings.apiKeys, newApiKey],
+  //     })
+  //     setNewApiKey({ exchange: '', key: '', secret: '' })
+  //     toast.success('API key added')
+  //   }
+  // }
 
   return (
     <Box>

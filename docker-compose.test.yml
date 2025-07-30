@@ -1,0 +1,128 @@
+version: '3.8'
+
+# Test-specific services and configurations
+services:
+  # Test runner container
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: test-runner
+    environment:
+      - PYTHONPATH=/app
+      - TEST_ENV=true
+      - API_BASE_URL=http://api-gateway:8000
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./:/app:ro
+      - ./test-results:/results
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - autogen-network
+    depends_on:
+      - api-gateway
+      - rabbitmq
+      - redis
+    command: ["pytest", "-v", "--color=yes"]
+
+  # Playwright test runner for UI tests
+  playwright-runner:
+    image: mcr.microsoft.com/playwright:v1.40.0-focal
+    container_name: playwright-runner
+    environment:
+      - BASE_URL=http://control-board:80
+      - API_URL=http://api-gateway:8000
+    volumes:
+      - ./control-board:/app
+      - ./screenshots:/screenshots
+      - ./playwright-report:/playwright-report
+    working_dir: /app
+    networks:
+      - autogen-network
+    depends_on:
+      - control-board
+      - api-gateway
+    command: ["npm", "test"]
+
+  # Mock external services for testing
+  mock-exchange:
+    image: mockserver/mockserver:latest
+    container_name: mock-exchange
+    ports:
+      - "1080:1080"
+    environment:
+      - MOCKSERVER_PROPERTY_FILE=/config/mockserver.properties
+      - MOCKSERVER_INITIALIZATION_JSON_PATH=/config/initializerJson.json
+    volumes:
+      - ./tests/mocks/exchange:/config:ro
+    networks:
+      - autogen-network
+
+  # Test database for isolated testing
+  test-postgres:
+    image: postgres:15-alpine
+    container_name: test-postgres
+    environment:
+      - POSTGRES_USER=test
+      - POSTGRES_PASSWORD=test
+      - POSTGRES_DB=autogen_test
+    ports:
+      - "5433:5432"
+    networks:
+      - autogen-network
+    volumes:
+      - test-postgres-data:/var/lib/postgresql/data
+
+  # Locust for load testing
+  locust:
+    image: locustio/locust:latest
+    container_name: locust
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./tests/performance:/mnt/locust
+    networks:
+      - autogen-network
+    command: ["-f", "/mnt/locust/locustfile.py", "--host", "http://api-gateway:8000"]
+
+  # Override configurations for test environment
+  api-gateway:
+    environment:
+      - ENVIRONMENT=test
+      - LOG_LEVEL=DEBUG
+      - ENABLE_TEST_ENDPOINTS=true
+      - JWT_SECRET=test-secret-key
+      - RATE_LIMIT_ENABLED=false
+
+  core-engine:
+    environment:
+      - ENVIRONMENT=test
+      - LOG_LEVEL=DEBUG
+      - SIMULATION_MODE=true
+      - MARKET_DATA_SOURCE=mock
+
+  agent-manager:
+    environment:
+      - ENVIRONMENT=test
+      - LOG_LEVEL=DEBUG
+      - MAX_AGENTS_PER_CUSTOMER=10
+      - AGENT_TIMEOUT=60
+
+  rabbitmq:
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+
+volumes:
+  test-postgres-data:
+    driver: local
+
+# Test network configuration
+networks:
+  autogen-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

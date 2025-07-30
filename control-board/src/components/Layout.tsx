@@ -24,7 +24,7 @@ import {
   Dashboard as DashboardIcon,
   Memory as MemoryIcon,
   SmartToy as SmartToyIcon,
-  Monitoring as MonitoringIcon,
+  Monitor as MonitoringIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   Person as PersonIcon,
@@ -223,3 +223,5 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     </Box>
   )
 }
+
+export default Layout

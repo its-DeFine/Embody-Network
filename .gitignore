@@ -62,4 +62,4 @@ dist/
 # Model files (large)
 *.gguf
 *.bin
-models/
+models/control-board/node_modules/

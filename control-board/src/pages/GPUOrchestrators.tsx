@@ -9,13 +9,11 @@ import {
   Chip,
   LinearProgress,
   IconButton,
-  Tooltip,
   Paper,
   Table,
   TableBody,
   TableCell,
   TableContainer,
-  TableHead,
   TableRow,
   Button,
   Dialog,
@@ -72,7 +70,7 @@ const GPUOrchestrators: React.FC = () => {
   )
 
   useEffect(() => {
-    const handleHealthUpdate = (data: any) => {
+    const handleHealthUpdate = () => {
       refetch()
     }
 

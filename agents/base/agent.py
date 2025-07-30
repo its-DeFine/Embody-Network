@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 import autogen
 from autogen.agentchat import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
+import httpx
 
 # Import shared modules
 import sys
@@ -49,12 +50,19 @@ class CustomerAgent:
         self.mq = None
         self.running = True
         
+        # OpenBB client
+        self.openbb_client: Optional[httpx.AsyncClient] = None
+        self.openbb_base_url = os.getenv("OPENBB_SERVICE_URL", "http://openbb-adapter:8003")
+        
         logger.info(f"Initializing {self.agent_type} agent: {self.agent_id}")
     
     async def initialize(self):
         """Initialize the agent"""
         # Connect to message queue
         self.mq = await self._connect_message_queue()
+        
+        # Initialize OpenBB client
+        await self._init_openbb_client()
         
         # Setup AutoGen agents
         self._setup_autogen_agents()
@@ -74,6 +82,83 @@ class CustomerAgent:
         await mq.connect()
         return mq
     
+    async def _init_openbb_client(self):
+        """Initialize OpenBB HTTP client"""
+        self.openbb_client = httpx.AsyncClient(
+            base_url=self.openbb_base_url,
+            timeout=30.0,
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+        )
+        
+        # Test connection
+        try:
+            response = await self.openbb_client.get("/health")
+            if response.status_code == 200:
+                logger.info("Connected to OpenBB adapter service")
+            else:
+                logger.warning(f"OpenBB adapter health check returned {response.status_code}")
+        except Exception as e:
+            logger.error(f"Failed to connect to OpenBB adapter: {e}")
+            # Continue without OpenBB if not available
+            self.openbb_client = None
+    
+    async def get_market_data(self, symbol: str, interval: str = "1d", start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
+        """Get market data from OpenBB service"""
+        if not self.openbb_client:
+            logger.warning("OpenBB client not initialized")
+            return {"error": "OpenBB service not available"}
+        
+        try:
+            params = {
+                "symbol": symbol,
+                "interval": interval
+            }
+            if start_date:
+                params["start_date"] = start_date
+            if end_date:
+                params["end_date"] = end_date
+            
+            response = await self.openbb_client.get("/api/v1/market/data", params=params)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error fetching market data: {e}")
+            return {"error": str(e)}
+    
+    async def get_technical_analysis(self, symbol: str, indicators: List[str]) -> Dict[str, Any]:
+        """Get technical analysis from OpenBB service"""
+        if not self.openbb_client:
+            logger.warning("OpenBB client not initialized")
+            return {"error": "OpenBB service not available"}
+        
+        try:
+            response = await self.openbb_client.post(
+                "/api/v1/analysis/technical",
+                json={"symbol": symbol, "indicators": indicators}
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error fetching technical analysis: {e}")
+            return {"error": str(e)}
+    
+    async def analyze_portfolio(self, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analyze portfolio using OpenBB service"""
+        if not self.openbb_client:
+            logger.warning("OpenBB client not initialized")
+            return {"error": "OpenBB service not available"}
+        
+        try:
+            response = await self.openbb_client.post(
+                "/api/v1/portfolio/analyze",
+                json={"positions": positions}
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Error analyzing portfolio: {e}")
+            return {"error": str(e)}
+    
     def _setup_autogen_agents(self):
         """Setup AutoGen agents based on agent type"""
         # LLM configuration
@@ -86,7 +171,7 @@ class CustomerAgent:
         
         # Create type-specific agent
         if self.agent_type == AgentType.TRADING:
-            agent_impl = TradingAgent(self.config)
+            agent_impl = TradingAgent(self.config, self.openbb_client)
         elif self.agent_type == AgentType.ANALYSIS:
             agent_impl = AnalysisAgent(self.config)
         elif self.agent_type == AgentType.RISK_MANAGEMENT:
@@ -375,6 +460,12 @@ class CustomerAgent:
     async def cleanup(self):
         """Cleanup resources"""
         self.running = False
+        
+        # Close OpenBB client
+        if self.openbb_client:
+            await self.openbb_client.aclose()
+        
+        # Disconnect message queue
         if self.mq:
             await self.mq.disconnect()
 

@@ -80,6 +80,29 @@ services:
       - redis
     restart: unless-stopped
 
+  # OpenBB Adapter Service
+  openbb-adapter:
+    build:
+      context: .
+      dockerfile: services/openbb-adapter/Dockerfile
+    container_name: openbb-adapter
+    ports:
+      - "8003:8003"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://admin:password@rabbitmq:5672/
+      - CACHE_TTL=1800
+      - LOG_LEVEL=debug
+    volumes:
+      - ./services/openbb-adapter:/app:ro
+      - ./shared:/app/shared:ro
+    networks:
+      - autogen-network
+    depends_on:
+      - redis
+      - rabbitmq
+    restart: unless-stopped
+
   # Update Pipeline Service
   update-pipeline:
     build:

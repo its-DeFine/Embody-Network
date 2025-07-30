@@ -12,13 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 class TradingAgent:
-    """Trading agent implementation with AutoGen functions"""
+    """Trading agent implementation with AutoGen functions and OpenBB integration"""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], openbb_client=None):
         self.config = config
         self.exchange_name = config.get("exchange", "binance")
         self.trading_pairs = config.get("trading_pairs", ["BTC/USDT"])
         self.risk_limit = config.get("risk_limit", 0.02)  # 2% risk per trade
+        self.openbb_client = openbb_client  # OpenBB client from base agent
         
         # Initialize dual-mode trading engine
         trading_config = {
@@ -68,17 +69,42 @@ In comparison mode, analyze divergence between real and simulated results.
         }
     
     async def get_market_data(self, symbol: str, timeframe: str = "1h", limit: int = 100) -> Dict[str, Any]:
-        """Get market data for analysis"""
+        """Get market data for analysis - uses OpenBB if available, otherwise exchange"""
         try:
             if not self._initialized:
                 await self.trading_engine.initialize()
                 self._initialized = True
             
-            # Get market data through dual-mode engine
+            # Try OpenBB first if available
+            if self.openbb_client:
+                try:
+                    openbb_data = await self.openbb_client.get(
+                        "/api/v1/market/data",
+                        params={
+                            "symbol": symbol,
+                            "interval": timeframe,
+                            "limit": limit
+                        }
+                    )
+                    if openbb_data.status_code == 200:
+                        data = openbb_data.json()
+                        logger.info(f"Using OpenBB data for {symbol}")
+                        return {
+                            "symbol": symbol,
+                            "timeframe": timeframe,
+                            "data": data.get("data", {}),
+                            "current_price": data.get("last_price"),
+                            "24h_change": data.get("change_24h"),
+                            "source": "openbb"
+                        }
+                except Exception as openbb_error:
+                    logger.warning(f"OpenBB data fetch failed: {openbb_error}")
+            
+            # Fallback to exchange data through dual-mode engine
             return await self.trading_engine.get_market_data(symbol, timeframe)
         except Exception as e:
             logger.error(f"Error getting market data: {e}")
-            # Fallback to simulated data if exchange fails
+            # Fallback to simulated data if everything fails
             return {
                 "symbol": symbol,
                 "timeframe": timeframe,
@@ -97,7 +123,7 @@ In comparison mode, analyze divergence between real and simulated results.
             }
     
     async def analyze_technicals(self, symbol: str, indicators: list = None) -> Dict[str, Any]:
-        """Analyze technical indicators"""
+        """Analyze technical indicators - uses OpenBB if available"""
         if indicators is None:
             indicators = ["RSI", "MACD", "BB", "EMA"]
         
@@ -106,7 +132,30 @@ In comparison mode, analyze divergence between real and simulated results.
                 await self.trading_engine.initialize()
                 self._initialized = True
             
-            # Get market data first
+            # Try OpenBB technical analysis first if available
+            if self.openbb_client:
+                try:
+                    openbb_analysis = await self.openbb_client.post(
+                        "/api/v1/analysis/technical",
+                        json={
+                            "symbol": symbol,
+                            "indicators": indicators
+                        }
+                    )
+                    if openbb_analysis.status_code == 200:
+                        analysis_data = openbb_analysis.json()
+                        logger.info(f"Using OpenBB technical analysis for {symbol}")
+                        return {
+                            "symbol": symbol,
+                            "analysis": analysis_data.get("indicators", {}),
+                            "overall_signal": analysis_data.get("overall_signal"),
+                            "confidence": analysis_data.get("confidence", 0.75),
+                            "source": "openbb"
+                        }
+                except Exception as openbb_error:
+                    logger.warning(f"OpenBB technical analysis failed: {openbb_error}")
+            
+            # Fallback to exchange data through dual-mode engine
             market_data = await self.trading_engine.get_market_data(symbol)
             
             # Calculate indicators based on mode

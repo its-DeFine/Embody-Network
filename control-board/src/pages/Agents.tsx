@@ -3,8 +3,6 @@ import { useQuery, useMutation, useQueryClient } from 'react-query'
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   Typography,
   Grid,
   Chip,
