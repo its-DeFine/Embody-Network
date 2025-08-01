@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     openbb_url: Optional[str] = None
     openbb_api_key: Optional[str] = None
     
+    # Market Data API Keys
+    openai_api_key: Optional[str] = None
+    alpha_vantage_api_key: Optional[str] = None
+    finnhub_api_key: Optional[str] = None
+    
     # Docker
     docker_network: str = "autogen-network"
     agent_image: str = "autogen-agent:latest"
