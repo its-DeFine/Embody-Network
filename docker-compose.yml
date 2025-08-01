@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build: .
@@ -14,15 +12,17 @@ services:
       - redis
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - ${DOCKER_GID:-999}
     networks:
-      - autogen-network
+      - platform-network
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     networks:
-      - autogen-network
+      - platform-network
 
   # Optional: OpenBB service for financial data
   openbb:
@@ -34,10 +34,10 @@ services:
     depends_on:
       - redis
     networks:
-      - autogen-network
+      - platform-network
     profiles:
       - financial
 
 networks:
-  autogen-network:
+  platform-network:
     driver: bridge

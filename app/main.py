@@ -15,10 +15,11 @@ import uvicorn
 import logging
 import structlog
 
-from .api import auth, agents, teams, tasks
+from .api import auth, agents, teams, tasks, gpu
 from .dependencies import get_redis, get_docker
 from .orchestrator import orchestrator
-from .config import settings
+from .gpu_orchestrator import gpu_orchestrator
+from .config import settings, IS_PRODUCTION, IS_DEVELOPMENT
 from .middleware import LoggingMiddleware, MetricsMiddleware
 from .errors import PlatformError, platform_exception_handler
 
@@ -66,31 +67,45 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting AutoGen Platform...")
     redis = await get_redis()
-    docker = get_docker()
     
-    # Check connections
+    # Check Redis connection
     await redis.ping()
-    docker.ping()
+    logger.info("Redis connected")
+    
+    # Try Docker connection (optional)
+    try:
+        docker = get_docker()
+        docker.ping()
+        logger.info("Docker connected")
+    except Exception as e:
+        logger.warning(f"Docker not available: {e}")
+        docker = None
     
     # Start orchestrator
     await orchestrator.start()
+    
+    # Initialize GPU orchestrator
+    await gpu_orchestrator.initialize()
+    await gpu_orchestrator.start_monitoring()
     
     logger.info("Platform started successfully")
     yield
     
     # Shutdown
     logger.info("Shutting down...")
+    await gpu_orchestrator.stop_monitoring()
     await orchestrator.stop()
     await redis.close()
-    docker.close()
+    if docker:
+        docker.close()
 
 # Create app with configuration
 app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
     lifespan=lifespan,
-    docs_url="/docs" if not settings.IS_PRODUCTION else None,
-    redoc_url="/redoc" if not settings.IS_PRODUCTION else None
+    docs_url="/docs" if not IS_PRODUCTION else None,
+    redoc_url="/redoc" if not IS_PRODUCTION else None
 )
 
 # Add middleware in correct order (last added = first executed)
@@ -98,7 +113,7 @@ app.add_middleware(MetricsMiddleware)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.IS_DEVELOPMENT else ["https://yourdomain.com"],
+    allow_origins=["*"] if IS_DEVELOPMENT else ["https://yourdomain.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -112,6 +127,7 @@ app.include_router(auth.router)
 app.include_router(agents.router)
 app.include_router(teams.router)
 app.include_router(tasks.router)
+app.include_router(gpu.router)
 
 # Health check
 @app.get("/health")
@@ -138,8 +154,8 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(client_id)
 
 # Mount static files (UI)
-if os.path.exists("app/static"):
-    app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
+if os.path.exists("frontend/dist"):
+    app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="static")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

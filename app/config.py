@@ -1,6 +1,7 @@
 """Application configuration with validation"""
 from typing import Optional, List
-from pydantic import BaseSettings, validator
+from pydantic import validator
+from pydantic_settings import BaseSettings
 import os
 
 class Settings(BaseSettings):

@@ -1,7 +1,7 @@
 """Team management routes for agent coordination"""
 import json
 import uuid
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -25,8 +25,9 @@ class TeamResponse(BaseModel):
     owner: str
 
 class TeamTaskRequest(BaseModel):
-    task_type: str  # consensus, parallel, sequential
-    data: dict
+    objective: str  # What the team should accomplish
+    context: Optional[dict] = {}  # Additional context
+    task_type: Optional[str] = "consensus"  # consensus, parallel, sequential
 
 @router.get("", response_model=List[TeamResponse])
 async def list_teams(
@@ -102,8 +103,10 @@ async def coordinate_team(
         f"user:{user}",
         {
             "team_id": team_id,
+            "objective": request.objective,
+            "context": request.context,
             "type": request.task_type,
-            **request.data
+            "agent_ids": team.get("agent_ids", [])
         }
     ))
     

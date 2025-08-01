@@ -1,6 +1,16 @@
 # AutoGen Platform
 
-A simple platform for deploying Microsoft AutoGen AI agents.
+A production-ready platform for orchestrating Microsoft AutoGen AI agents with a web-based control board.
+
+## 📚 Documentation
+
+**All documentation has been organized in the [`docs/`](./docs/) folder:**
+
+- 🚀 [**Quick Start Guide**](./docs/LAUNCH_GUIDE.md) - Get up and running
+- 📖 [**Full Documentation**](./docs/README.md) - Complete documentation index
+- 🎨 [**Frontend Guide**](./docs/FRONTEND_GUIDE.md) - Using the web UI
+- 🤖 [**Agent Management**](./docs/AGENT_MANAGEMENT.md) - Working with agents
+- 👥 [**Team Coordination**](./docs/TEAM_COORDINATION.md) - Multi-agent teams
 
 ## Quick Start
 

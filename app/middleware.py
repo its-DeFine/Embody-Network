@@ -19,41 +19,45 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # Start timer
         start_time = time.time()
         
-        # Add request ID to all logs in this context
-        with logger.contextvars.bind(request_id=request_id):
-            logger.info(f"Request started: {request.method} {request.url.path}")
+        # Log with request ID
+        logger.info(
+            f"Request started: {request.method} {request.url.path}",
+            extra={"request_id": request_id}
+        )
+        
+        try:
+            response = await call_next(request)
             
-            try:
-                response = await call_next(request)
-                
-                # Calculate duration
-                duration = time.time() - start_time
-                
-                # Log completion
-                logger.info(
-                    f"Request completed: {request.method} {request.url.path}",
-                    extra={
-                        "status_code": response.status_code,
-                        "duration_ms": round(duration * 1000, 2)
-                    }
-                )
-                
-                # Add headers
-                response.headers["X-Request-ID"] = request_id
-                response.headers["X-Response-Time"] = str(duration)
-                
-                return response
-                
-            except Exception as e:
-                duration = time.time() - start_time
-                logger.error(
-                    f"Request failed: {request.method} {request.url.path}",
-                    extra={
-                        "error": str(e),
-                        "duration_ms": round(duration * 1000, 2)
-                    }
-                )
-                raise
+            # Calculate duration
+            duration = time.time() - start_time
+            
+            # Log completion
+            logger.info(
+                f"Request completed: {request.method} {request.url.path}",
+                extra={
+                    "request_id": request_id,
+                    "status_code": response.status_code,
+                    "duration_ms": round(duration * 1000, 2)
+                }
+            )
+            
+            # Add headers
+            response.headers["X-Request-ID"] = request_id
+            response.headers["X-Response-Time"] = str(duration)
+            
+            return response
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            logger.error(
+                f"Request failed: {request.method} {request.url.path}",
+                extra={
+                    "request_id": request_id,
+                    "error": str(e),
+                    "duration_ms": round(duration * 1000, 2)
+                }
+            )
+            raise
 
 class MetricsMiddleware(BaseHTTPMiddleware):
     """Collect metrics for monitoring"""

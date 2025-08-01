@@ -175,7 +175,10 @@ class Orchestrator:
         
         if agent_id:
             task["assigned_to"] = agent_id
-            await self.redis.lpush(f"agent:{agent_id}:tasks", json.dumps(task))
+            # Save task state
+            await self.redis.set(f"task:{task['id']}", json.dumps(task))
+            # Send to agent via pub/sub
+            await self.redis.publish(f"agent:{agent_id}:tasks", json.dumps(task))
             logger.info(f"Task {task['id']} assigned to agent {agent_id}")
         else:
             # No agent available, queue for later
@@ -235,37 +238,35 @@ class Orchestrator:
                     
     async def _find_best_agent(self, task_type: str) -> Optional[str]:
         """Find the best available agent for a task type"""
-        # Map task types to agent types
+        # Map task types to agent types (flexible mapping)
         task_agent_map = {
-            "analyze_market": ["analysis", "trading"],
-            "execute_trade": ["trading"],
-            "assess_risk": ["risk", "trading"],
-            "optimize_portfolio": ["portfolio", "risk"]
+            "analysis": ["analysis", "trading"],
+            "trading": ["trading"],
+            "risk": ["risk", "analysis"],
+            "portfolio": ["portfolio", "trading", "analysis"]
         }
         
-        suitable_types = task_agent_map.get(task_type, [])
+        # Get suitable agent types, default to any type if not mapped
+        suitable_types = task_agent_map.get(task_type, ["analysis", "trading", "risk", "portfolio"])
         
         # Find running agents of suitable types
         agent_keys = await self.redis.keys("agent:*")
         candidates = []
         
         for key in agent_keys:
-            if b":status" in key or b":tasks" in key:
+            # Skip status and task keys
+            key_str = key.decode() if isinstance(key, bytes) else key
+            if ":status" in key_str or ":tasks" in key_str:
                 continue
                 
             agent_data = await self.redis.get(key)
             if agent_data:
                 agent = json.loads(agent_data)
-                if agent["type"] in suitable_types and agent["status"] == "running":
-                    # Check workload
-                    queue_length = await self.redis.llen(f"agent:{agent['id']}:tasks")
-                    candidates.append((agent["id"], queue_length))
+                if agent.get("status") == "running" and agent.get("type") in suitable_types:
+                    # For now, just return the first available agent
+                    return agent["id"]
                     
-        # Return agent with least workload
-        if candidates:
-            candidates.sort(key=lambda x: x[1])
-            return candidates[0][0]
-            
+        # No suitable agent found
         return None
         
     async def _reassign_agent_tasks(self, agent_id: str):
