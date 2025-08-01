@@ -8,21 +8,45 @@ services:
       - JWT_SECRET=${JWT_SECRET:-please-change-me}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - TWELVEDATA_API_KEY=${TWELVEDATA_API_KEY}
+      - MARKETSTACK_API_KEY=${MARKETSTACK_API_KEY}
+      - POLYGON_API_KEY=${POLYGON_API_KEY}
+      - INITIAL_CAPITAL=${INITIAL_CAPITAL:-1000.00}
+      - MAX_POSITION_PCT=${MAX_POSITION_PCT:-0.10}
+      - STOP_LOSS_PCT=${STOP_LOSS_PCT:-0.02}
+      - TARGET_SYMBOLS=${TARGET_SYMBOLS:-AAPL,MSFT,GOOGL,TSLA,NVDA}
     depends_on:
       - redis
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - trading_data:/app/data
     group_add:
       - ${DOCKER_GID:-999}
     networks:
       - platform-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     networks:
       - platform-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
   # Optional: OpenBB service for financial data
   openbb:
@@ -37,6 +61,12 @@ services:
       - platform-network
     profiles:
       - financial
+
+volumes:
+  trading_data:
+    driver: local
+  redis_data:
+    driver: local
 
 networks:
   platform-network:

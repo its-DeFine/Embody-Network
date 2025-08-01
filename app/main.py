@@ -15,7 +15,7 @@ import uvicorn
 import logging
 import structlog
 
-from .api import auth, agents, teams, tasks, gpu, market, management
+from .api import auth, agents, teams, tasks, gpu, market, management, trading
 from .dependencies import get_redis, get_docker
 from .orchestrator import orchestrator
 from .gpu_orchestrator import gpu_orchestrator
@@ -138,6 +138,7 @@ app.include_router(tasks.router)
 app.include_router(gpu.router)
 app.include_router(market.router)
 app.include_router(management.router)  # New management API
+app.include_router(trading.router)  # 24/7 Trading API
 
 # Health check
 @app.get("/health")

@@ -1,12 +1,13 @@
 """
 GPU Management API endpoints
 """
+import json
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
 
-from ..auth import get_current_user
+from .auth import get_current_user
 from ..gpu_orchestrator import gpu_orchestrator
 from ..orchestrator import Event, orchestrator
 from ..dependencies import get_redis
