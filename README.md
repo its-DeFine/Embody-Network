@@ -167,9 +167,9 @@ operation/
 │   │   ├── monitoring/           # Audit & health
 │   │   └── security/             # Authentication
 │   └── services/                 # External integrations
-├── docs/                         # Documentation
-├── scripts/                      # Operational scripts
-├── tests/                        # Test suite
+├── docs/                         # Production documentation
+├── scripts/                      # Setup and configuration scripts
+├── keys/                         # Security keys and deployment
 ├── docker-compose.yml            # Container orchestration
 └── requirements.txt              # Python dependencies
 ```

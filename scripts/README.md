@@ -1,101 +1,117 @@
-# Scripts Directory Structure
+# Scripts Directory
 
-This directory contains various scripts for managing and testing the trading system.
+**Production-ready setup and configuration scripts for the 24/7 Trading System.**
 
-## Directory Organization
+## Current Scripts
 
-### 📊 `/trading/`
-Scripts for managing the live trading system:
-- **`monitor_trading.sh`** - Consolidated monitoring tool with multiple modes:
-  - `./monitor_trading.sh status` - Show current system status
-  - `./monitor_trading.sh live` - Real-time monitoring
-  - `./monitor_trading.sh history` - View detailed trading history
-- **`start_1k_trading.sh`** - Start 24/7 trading with $1,000
-- **`start_trading.sh`** - General trading startup script
-- **`start_dashboard.sh`** - Launch the web dashboard
+### ⚙️ `/setup/` - System Configuration
+Essential setup scripts for configuring your trading system:
 
-**Deprecated scripts** (functionality merged into `monitor_trading.sh`):
-- `check_live_trading.sh`, `check_trading_status.sh`, `view_trading_details.sh`, `check_real_pnl.sh`
+- **`configure_apis.sh`** - API configuration utility:
+  - Interactive setup wizard for market data APIs
+  - Tests API connectivity and key validity
+  - Configures Finnhub, TwelveData, Alpha Vantage
 
-### 🧪 `/testing/`
-Test scripts for various system components:
-- **`test_runner.sh`** - Unified test runner with multiple modes:
-  - `./test_runner.sh quick` - Basic health check and login
-  - `./test_runner.sh api` - Test all API endpoints
-  - `./test_runner.sh market [--real-data]` - Market data tests
-  - `./test_runner.sh trading [--with-pnl]` - Trading functionality
-  - `./test_runner.sh system` - Run all tests comprehensively
-  - Options: `--real-data`, `--with-pnl`, `--crypto-only`, `--verbose`, `--timeout=N`
+- **`register_instance.py`** - Instance registration:
+  - Registers trading instance with master manager
+  - Handles PGP key exchange and authentication
 
-**Specialized test scripts** (kept separate due to unique functionality):
-- **`test_gpu_trading.sh`** - GPU acceleration tests
-- **`test_new_architecture.sh`** - Architecture validation tests
-- **`run_tests.sh`** - Legacy comprehensive test runner
+### 🔐 Security & Keys
+- **`setup_pgp_keys.sh`** - PGP key management:
+  - Generates secure PGP key pairs
+  - Configures key storage and permissions
+  - Sets up secure communication channels
 
-**Deprecated scripts** (functionality merged into `test_runner.sh`):
-- `quick_test.sh`, `test_login_and_api.sh` → use `test_runner.sh quick/api`
-- `test_real_market_trading.sh`, `test_simple_real_market.sh` → use `test_runner.sh market --real-data`
-- `test_crypto_trading_pnl.sh` → use `test_runner.sh trading --crypto-only --with-pnl`
-- `test_trading_scenario.sh`, `test_agent_simulation.sh` → use `test_runner.sh trading`
+### 🤖 AI Integration  
+- **`setup_ollama_models.sh`** - AI model setup:
+  - Downloads and configures Ollama LLM models
+  - Optimizes for trading analysis and decision making
 
-### 🎯 `/demo/`
-Demonstration scripts:
-- **`demo_cross_instance.py`** - Cross-instance collaboration demo
-- **`demo_live_system.py`** - Live system demonstration
-- Various trading scenario demos
+## Quick Start
 
-### ⚙️ `/setup/`
-Configuration and setup scripts:
-- **`configure_apis.sh`** - Consolidated API configuration tool:
-  - `./configure_apis.sh setup` - Interactive setup wizard
-  - `./configure_apis.sh show` - View current configuration
-  - `./configure_apis.sh test` - Test API connections
-- **`register_instance.py`** - Register trading instance
-
-**Deprecated scripts** (functionality merged into `configure_apis.sh`):
-- `configure_market_apis.sh`, `setup_api_keys.sh`
-
-### 🔧 `/dev/`
-Development and debugging scripts:
-- **`run_local.sh`** - Run system locally
-- **`run_separate_agents.sh`** - Run agents separately for debugging
-
-## Usage Examples
-
-### Start Trading
-```bash
-cd trading
-./start_1k_trading.sh
-```
-
-### Monitor System
-```bash
-cd trading
-./monitor_trading.sh live  # Real-time monitoring
-```
-
-### Configure APIs
+### 1. Configure API Keys
 ```bash
 cd setup
-./configure_apis.sh setup  # Interactive setup
+./configure_apis.sh
+# Follow interactive prompts to configure:
+# - Finnhub API key
+# - TwelveData API key  
+# - Alpha Vantage API key
 ```
 
-### Run Tests
+### 2. Setup Security (Optional)
 ```bash
-cd testing
-# Quick test
-./test_runner.sh quick
-
-# Test with real market data
-./test_runner.sh market --real-data
-
-# Full system test
-./test_runner.sh system --verbose
+./setup_pgp_keys.sh
+# Generates PGP keys for secure communications
 ```
 
-## Best Practices
+### 3. Setup AI Models (Optional)
+```bash
+./setup_ollama_models.sh
+# Downloads Ollama models for enhanced trading intelligence
+```
 
-1. Always use the consolidated scripts when available
-2. Check script help with `./script_name.sh help`
-3. Ensure Docker is running before executing trading scripts
-4. Configure API keys before starting live trading
+### 4. Start Trading System
+```bash
+# Return to root directory
+cd ..
+
+# Start the system
+docker-compose up -d
+
+# Verify system health
+curl http://localhost:8000/health
+```
+
+## Script Details
+
+### API Configuration (`setup/configure_apis.sh`)
+- Interactive setup wizard
+- Tests API connectivity
+- Validates API keys
+- Creates proper `.env` configuration
+- Supports multiple data providers
+
+### Instance Registration (`setup/register_instance.py`)
+- Registers with master trading manager
+- Handles secure key exchange
+- Sets up cross-instance communication
+- Required for multi-instance deployments
+
+### PGP Key Setup (`setup_pgp_keys.sh`)
+- Generates secure PGP key pairs
+- Configures GPG keyring
+- Sets proper file permissions
+- Enables encrypted communications
+
+### Ollama Setup (`setup_ollama_models.sh`)
+- Downloads AI models optimized for trading
+- Configures model parameters
+- Sets up local LLM inference
+- Enhances trading decision intelligence
+
+## Production Deployment
+
+For production deployment, run scripts in this order:
+
+1. **`setup/configure_apis.sh`** - Configure all API keys
+2. **`setup_pgp_keys.sh`** - Setup security keys
+3. **`setup/register_instance.py`** - Register instance (if using master manager)
+4. **Start system**: `docker-compose up -d`
+
+## Security Notes
+
+- All scripts handle sensitive data securely
+- API keys are never logged or displayed
+- PGP keys are generated with secure parameters  
+- Scripts validate input and permissions
+- Use these scripts instead of manual configuration
+
+## Need Help?
+
+Each script includes help documentation:
+```bash
+./script_name.sh --help
+```
+
+For system issues, see: `/docs/TROUBLESHOOTING.md`
