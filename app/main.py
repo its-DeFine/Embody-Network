@@ -16,7 +16,7 @@ import uvicorn
 import logging
 import structlog
 
-from .api import auth, agents, teams, tasks, gpu, market, management, trading, master, audit, dex, ollama, security
+from .api import auth, agents, teams, tasks, gpu, market, management, trading, master, audit, dex, ollama, security, cluster
 from .dependencies import get_redis, get_docker
 from .core.orchestration.orchestrator import orchestrator
 from .core.orchestration.gpu_orchestrator import gpu_orchestrator
@@ -111,6 +111,32 @@ async def lifespan(app: FastAPI):
     await secure_key_manager.initialize()
     logger.info("Security manager initialized with PGP support")
     
+    # Initialize distributed container services
+    from .core.orchestration.container_discovery import container_discovery_service
+    from .core.orchestration.container_registry import container_registry
+    from .core.agents.distributed_agent_manager import distributed_agent_manager
+    from .infrastructure.messaging.container_hub import container_hub
+    
+    try:
+        # Initialize container communication hub first
+        await container_hub.initialize()
+        logger.info("Container communication hub initialized")
+        
+        # Start container discovery
+        await container_discovery_service.start()
+        logger.info("Container discovery service started")
+        
+        # Start container registry
+        await container_registry.start()
+        logger.info("Container registry service started")
+        
+        # Start distributed agent manager
+        await distributed_agent_manager.start()
+        logger.info("Distributed agent manager started")
+    except Exception as e:
+        logger.warning(f"Distributed services initialization issue: {e}")
+        # Continue without distributed services - fallback to monolithic mode
+    
     # Initialize Ollama if available
     try:
         await ollama_manager.initialize()
@@ -144,6 +170,17 @@ async def lifespan(app: FastAPI):
     
     # Shutdown in reverse order
     logger.info("Shutting down 24/7 Trading Platform...")
+    
+    # Stop distributed services if running
+    try:
+        await distributed_agent_manager.stop()
+        await container_registry.stop()
+        await container_discovery_service.stop()
+        await container_hub.shutdown()
+        logger.info("Distributed services stopped")
+    except:
+        pass  # Services might not have been started
+    
     await strategy_manager.stop()
     await websocket_manager.stop()
     await collective_intelligence.stop()
@@ -194,6 +231,7 @@ app.include_router(audit.router)  # Audit logging API
 app.include_router(dex.router)  # DEX trading API
 app.include_router(ollama.router)  # Ollama LLM API
 app.include_router(security.router)  # Security API
+app.include_router(cluster.router)  # Cluster management API
 
 # Health check
 @app.get("/health")
