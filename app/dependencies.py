@@ -7,12 +7,14 @@ import jwt
 import redis.asyncio as redis
 import docker
 
+from .config import settings
+
 # Security
 security = HTTPBearer()
 
-# JWT settings
-JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")
-JWT_ALGORITHM = "HS256"
+# Use centralized configuration - no hardcoded defaults
+JWT_SECRET = settings.jwt_secret
+JWT_ALGORITHM = settings.jwt_algorithm
 
 # Global clients
 redis_client: Optional[redis.Redis] = None

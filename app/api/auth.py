@@ -6,10 +6,13 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import jwt
 
+from ..config import settings
+
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")
-JWT_ALGORITHM = "HS256"
+# Use centralized configuration - no hardcoded defaults
+JWT_SECRET = settings.jwt_secret
+JWT_ALGORITHM = settings.jwt_algorithm
 
 class LoginRequest(BaseModel):
     email: str
@@ -22,15 +25,15 @@ class LoginResponse(BaseModel):
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
     """Simple login endpoint"""
-    # In production, verify against database
-    if request.password != os.getenv("ADMIN_PASSWORD", "admin123"):
+    # Use centralized configuration - no hardcoded defaults
+    if request.password != settings.admin_password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Create token
     token = jwt.encode(
         {
             "sub": request.email,
-            "exp": datetime.utcnow() + timedelta(hours=24)
+            "exp": datetime.utcnow() + timedelta(hours=settings.jwt_expiration_hours)
         },
         JWT_SECRET,
         algorithm=JWT_ALGORITHM

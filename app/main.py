@@ -30,7 +30,7 @@ from .infrastructure.monitoring.audit_logger import audit_logger
 from .core.trading.dex_trading import dex_trading_engine
 from .services.ollama_integration import ollama_manager
 from .config import settings, IS_PRODUCTION, IS_DEVELOPMENT
-from .middleware import LoggingMiddleware, MetricsMiddleware
+from .middleware import LoggingMiddleware, MetricsMiddleware, RateLimitMiddleware, SecurityHeadersMiddleware, TradingSecurityMiddleware
 from .errors import PlatformError, platform_exception_handler
 
 # Configure structured logging
@@ -166,11 +166,14 @@ app = FastAPI(
 # Add middleware in correct order (last added = first executed)
 app.add_middleware(MetricsMiddleware)
 app.add_middleware(LoggingMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(TradingSecurityMiddleware)
+app.add_middleware(RateLimitMiddleware, requests_per_minute=60)  # Conservative rate limiting
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if IS_DEVELOPMENT else ["https://yourdomain.com"],
+    allow_origins=["http://localhost:3000", "http://localhost:8080"] if IS_DEVELOPMENT else ["https://yourdomain.com"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -225,10 +228,30 @@ async def authenticated_websocket(websocket: WebSocket):
     token = websocket.query_params.get("token")
     user_id = None
     
-    # Validate token (simplified - use proper auth in production)
-    if token:
-        # user_id = validate_token(token)  # Implement token validation
-        user_id = "user_123"  # Placeholder
+    # Validate token - PROPER AUTHENTICATION IMPLEMENTED
+    if not token:
+        await websocket.close(code=4001, reason="Authentication token required")
+        return
+    
+    try:
+        import jwt
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        user_id = payload.get("sub")
+        
+        if not user_id:
+            await websocket.close(code=4001, reason="Invalid token payload")
+            return
+            
+    except jwt.ExpiredSignatureError:
+        await websocket.close(code=4001, reason="Token expired")
+        return
+    except jwt.InvalidTokenError:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+    except Exception as e:
+        logger.error(f"WebSocket authentication error: {e}")
+        await websocket.close(code=4001, reason="Authentication failed")
+        return
         
     client_id = await websocket_manager.connect_client(websocket, user_id)
     

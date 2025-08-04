@@ -1,6 +1,11 @@
 """
 Master Manager Integration API
 Handles commands from the master central manager
+
+TODO: [CENTRAL-MANAGER] Add comprehensive test coverage for master API endpoints
+TODO: [CENTRAL-MANAGER] Implement command queuing for high-availability scenarios
+TODO: [SECURITY] Add request signing validation for additional security layers
+TODO: [MONITORING] Add detailed audit logging for all master commands
 """
 
 import os
@@ -24,8 +29,10 @@ router = APIRouter(
     tags=["master"]
 )
 
-# Master secret for signature verification
-MASTER_SECRET_KEY = os.environ.get("MASTER_SECRET_KEY", "super-secret-master-key-change-this")
+# Master secret for signature verification - require environment variable
+MASTER_SECRET_KEY = os.environ.get("MASTER_SECRET_KEY")
+if not MASTER_SECRET_KEY:
+    raise ValueError("MASTER_SECRET_KEY environment variable must be set for master manager integration")
 
 
 class MasterCommand(BaseModel):

@@ -8,6 +8,12 @@ This module provides advanced agent management capabilities including:
 - Voting mechanisms for trade decisions
 - Agent clustering for specialized tasks
 - Real-time agent orchestration
+
+TODO: [CONTAINER] Add comprehensive test coverage for agent lifecycle management
+TODO: [CONTAINER] Implement agent performance monitoring and health checks
+TODO: [CONTAINER] Add agent failure recovery and automatic restart mechanisms
+TODO: [PERFORMANCE] Optimize inter-agent communication for high-frequency scenarios
+TODO: [SECURITY] Add agent authentication and authorization for sensitive operations
 """
 
 import asyncio

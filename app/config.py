@@ -51,8 +51,50 @@ class Settings(BaseSettings):
     
     @validator("jwt_secret")
     def jwt_secret_required(cls, v):
-        if not v or v == "change-me-in-production":
-            raise ValueError("JWT_SECRET must be set to a secure value")
+        if not v:
+            raise ValueError("JWT_SECRET environment variable is required")
+        
+        # Check for common weak defaults
+        weak_secrets = [
+            "change-me-in-production",
+            "change-me", 
+            "secret",
+            "jwt-secret",
+            "your-secret-here",
+            "supersecret",
+            "jwt_secret"
+        ]
+        
+        if v.lower() in [s.lower() for s in weak_secrets]:
+            raise ValueError(f"JWT_SECRET cannot be a default value. Use a cryptographically secure random string.")
+        
+        if len(v) < 32:
+            raise ValueError("JWT_SECRET must be at least 32 characters long for security")
+            
+        return v
+    
+    @validator("admin_password")
+    def admin_password_required(cls, v):
+        if not v:
+            raise ValueError("ADMIN_PASSWORD environment variable is required")
+        
+        # Check for common weak defaults
+        weak_passwords = [
+            "admin",
+            "admin123", 
+            "password",
+            "123456",
+            "change-me",
+            "admin-password",
+            "your-password-here"
+        ]
+        
+        if v.lower() in [s.lower() for s in weak_passwords]:
+            raise ValueError(f"ADMIN_PASSWORD cannot be a default value. Use a strong, unique password.")
+        
+        if len(v) < 12:
+            raise ValueError("ADMIN_PASSWORD must be at least 12 characters long for security")
+            
         return v
     
     @validator("environment")
