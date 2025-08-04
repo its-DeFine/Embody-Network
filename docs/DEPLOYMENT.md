@@ -1,403 +1,477 @@
-# 24/7 Trading System Deployment Guide
+# Production Deployment Guide
 
-## Overview
+**Complete guide for deploying the 24/7 Autonomous Trading System to production.**
 
-This guide covers the complete deployment of the 24/7 trading system with $1,000 starting capital. The system is designed to run continuously, executing real trades based on market data from multiple providers.
+## 🚀 Quick Deploy (30 seconds)
 
-## System Requirements
-
-### Minimum Requirements
-- **CPU**: 2 cores, 2.0 GHz
-- **RAM**: 4GB (8GB recommended)
-- **Storage**: 20GB SSD
-- **Network**: Stable internet connection (>10 Mbps)
-- **OS**: Linux (Ubuntu 20.04+ recommended), macOS, or Windows with WSL2
-
-### Recommended Production Setup
-- **CPU**: 4+ cores, 3.0 GHz
-- **RAM**: 8GB+
-- **Storage**: 50GB+ SSD with backup
-- **Network**: Redundant internet connections
-- **Monitoring**: Dedicated monitoring server
-
-## Prerequisites
-
-### Software Dependencies
 ```bash
-# Docker & Docker Compose
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-sudo usermod -aG docker $USER
-
-# Python 3.9+ (for local development)
-sudo apt update
-sudo apt install python3.9 python3.9-pip python3.9-venv
-
-# Git
-sudo apt install git
-```
-
-### API Keys Required
-Get free API keys from these providers:
-- **Finnhub**: https://finnhub.io/ (60 calls/minute free)
-- **Twelve Data**: https://twelvedata.com/ (800 calls/day free)
-- **MarketStack**: https://marketstack.com/ (1000 calls/month free)
-- **Alpha Vantage** (optional): https://www.alphavantage.co/
-- **Polygon.io** (optional): https://polygon.io/
-
-## Installation Steps
-
-### 1. Clone Repository
-```bash
-git clone https://github.com/your-repo/trading-system.git
-cd trading-system
-```
-
-### 2. Environment Configuration
-```bash
-# Copy environment template
-cp .env.example .env
-
-# Edit with your settings
-nano .env
-```
-
-**Required Environment Variables:**
-```env
-# Security
-JWT_SECRET=your-super-secure-jwt-secret-here
-ADMIN_PASSWORD=your-secure-admin-password
-
-# API Keys
-FINNHUB_API_KEY=your-finnhub-key
-TWELVEDATA_API_KEY=your-twelvedata-key
-MARKETSTACK_API_KEY=your-marketstack-key
-
-# Trading Parameters
-INITIAL_CAPITAL=1000.00
-MAX_POSITION_PCT=0.10
-STOP_LOSS_PCT=0.02
-TARGET_SYMBOLS=AAPL,MSFT,GOOGL,TSLA,NVDA,META,AMZN
-```
-
-### 3. Production Configuration
-For production deployment, use the production environment file:
-```bash
-cp .env.production .env
-# Edit with your production values
-```
-
-### 4. Build and Deploy
-```bash
-# Build the application
-docker-compose build
-
-# Start the services
-docker-compose up -d
-
-# Check status
-docker-compose ps
-```
-
-### 5. Initialize Trading System
-```bash
-# Check if services are running
-curl http://localhost:8000/health
-
-# Start trading with $1,000 capital
+# Clone, configure, and start trading in one command
+git clone <repo-url> && cd operation && \
+cp .env.example .env && \
+docker-compose up -d && \
+sleep 30 && \
 curl -X POST "http://localhost:8000/api/v1/trading/start" \
   -H "Content-Type: application/json" \
   -d '{"initial_capital": 1000.0}'
 ```
 
-## Configuration Options
+## 📋 Prerequisites
 
-### Trading Parameters
-```env
-# Starting capital
-INITIAL_CAPITAL=1000.00
+### System Requirements
 
-# Risk management
-MAX_POSITION_PCT=0.10      # Max 10% per position
-STOP_LOSS_PCT=0.02         # 2% stop loss
-COMMISSION_PCT=0.001       # 0.1% commission
+**Minimum (Development):**
+- CPU: 2 cores, 2.0 GHz
+- RAM: 4GB  
+- Storage: 20GB SSD
+- Network: Stable internet (>10 Mbps)
 
-# Target stocks
-TARGET_SYMBOLS=AAPL,MSFT,GOOGL,TSLA,NVDA,META,AMZN
+**Recommended (Production):**
+- CPU: 4+ cores, 3.0+ GHz
+- RAM: 8GB+
+- Storage: 50GB+ SSD with backup
+- Network: Redundant internet connections
+- OS: Linux (Ubuntu 20.04+), macOS, Windows with WSL2
 
-# Strategy settings
-ARBITRAGE_MIN_PROFIT=0.001  # 0.1% minimum profit
-SCALPING_TRADES_PER_DAY=35  # Target 35 trades/day
-DCA_INTERVAL_HOURS=4        # DCA every 4 hours
-```
+### Software Dependencies
 
-### Security Settings
-```env
-# Authentication
-JWT_SECRET=generate-a-secure-random-string
-JWT_EXPIRATION_HOURS=24
-ADMIN_PASSWORD=strong-password-here
-
-# CORS (for production)
-ALLOWED_ORIGINS=https://yourdomain.com
-```
-
-### Database & Cache
-```env
-# Redis (included in Docker Compose)
-REDIS_URL=redis://redis:6379
-REDIS_POOL_SIZE=20
-
-# Optional: External database
-DATABASE_URL=postgresql://user:pass@host:5432/trading_db
-```
-
-## API Endpoints
-
-### Trading Control
-- `POST /api/v1/trading/start` - Start trading system
-- `POST /api/v1/trading/stop` - Stop trading system
-- `GET /api/v1/trading/status` - Get system status
-
-### Portfolio Management
-- `GET /api/v1/trading/portfolio` - Portfolio status
-- `GET /api/v1/trading/positions` - Current positions
-- `GET /api/v1/trading/performance` - Performance metrics
-- `GET /api/v1/trading/trades` - Trade history
-
-### Monitoring
-- `GET /health` - Basic health check
-- `GET /api/v1/trading/health` - Detailed health check
-- `WebSocket /api/v1/trading/ws` - Real-time updates
-
-## Monitoring & Maintenance
-
-### Health Checks
-The system includes comprehensive health monitoring:
 ```bash
-# Basic health check
+# Install Docker & Docker Compose
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+
+# Install Git
+sudo apt update && sudo apt install git
+
+# Python 3.9+ (optional, for local development)
+sudo apt install python3.9 python3.9-pip python3.9-venv
+```
+
+### Required API Keys (Free Tiers)
+
+Get free API keys from these providers:
+
+1. **Finnhub** - https://finnhub.io/
+   - Free: 60 calls/minute
+   - Primary stock market data
+
+2. **Twelve Data** - https://twelvedata.com/
+   - Free: 800 calls/day
+   - Real-time quotes & historical data
+
+3. **MarketStack** - https://marketstack.com/
+   - Free: 1,000 calls/month
+   - Market data backup
+
+4. **Alpha Vantage** (optional) - https://www.alphavantage.co/
+   - Free: 5 calls/minute, 500/day
+   - Additional market data source
+
+## 🔧 Installation
+
+### 1. Clone Repository
+```bash
+git clone <repository-url>
+cd operation
+```
+
+### 2. Environment Configuration
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit configuration
+nano .env
+```
+
+**Required Environment Variables:**
+```env
+# Security (CHANGE THESE!)
+JWT_SECRET=your-super-secure-jwt-secret-minimum-32-characters
+ADMIN_PASSWORD=your-secure-admin-password-12chars-min
+
+# Market Data API Keys
+FINNHUB_API_KEY=your-finnhub-api-key-here
+TWELVEDATA_API_KEY=your-twelvedata-api-key-here
+MARKETSTACK_API_KEY=your-marketstack-api-key-here
+
+# Trading Configuration
+INITIAL_CAPITAL=1000.00                    # Starting capital
+MAX_POSITION_PCT=0.10                      # Max 10% per position
+STOP_LOSS_PCT=0.02                         # 2% stop loss
+TARGET_SYMBOLS=AAPL,MSFT,GOOGL,TSLA,NVDA  # Symbols to trade
+
+# System Configuration
+REDIS_URL=redis://redis:6379
+ENVIRONMENT=production
+LOG_LEVEL=INFO
+
+# Optional: Additional API Keys
+ALPHA_VANTAGE_API_KEY=your-alpha-vantage-key
+POLYGON_API_KEY=your-polygon-key
+```
+
+### 3. Production Security Configuration
+
+**Generate Secure Secrets:**
+```bash
+# Generate JWT secret
+openssl rand -hex 32
+
+# Generate admin password
+openssl rand -base64 24
+```
+
+**File Permissions:**
+```bash
+# Secure environment file
+chmod 600 .env
+
+# Secure keys directory (if using PGP)
+chmod 700 keys/
+chmod 600 keys/*.asc
+```
+
+### 4. Build and Deploy
+
+```bash
+# Build application
+docker-compose build
+
+# Start services in background
+docker-compose up -d
+
+# Verify deployment
+docker-compose ps
+```
+
+Expected output:
+```
+NAME              COMMAND                  SERVICE   STATUS    PORTS
+operation-app-1   "uvicorn app.main:ap…"   app       running   0.0.0.0:8000->8000/tcp
+operation-redis-1 "docker-entrypoint.s…"   redis     running   0.0.0.0:6379->6379/tcp
+```
+
+### 5. Initialize Trading System
+
+```bash
+# Health check
 curl http://localhost:8000/health
 
-# Detailed trading health
-curl http://localhost:8000/api/v1/trading/health
+# Start trading with $1,000
+curl -X POST "http://localhost:8000/api/v1/trading/start" \
+  -H "Content-Type: application/json" \
+  -d '{"initial_capital": 1000.0}'
 
-# System metrics
-curl http://localhost:8000/metrics
+# Verify trading started
+curl http://localhost:8000/api/v1/trading/status
 ```
 
-### Log Monitoring
+## 🔍 Verification & Testing
+
+### 1. System Health Checks
+
 ```bash
-# View application logs
-docker-compose logs -f app
+# Basic health
+curl http://localhost:8000/health
 
-# View trading-specific logs
-docker-compose logs -f app | grep -i trading
+# Detailed system status
+curl http://localhost:8000/api/v1/trading/status
 
-# Export logs
-docker-compose logs app > trading_logs.txt
-```
-
-### Performance Monitoring
-```bash
-# Check portfolio status
+# Check portfolio
 curl http://localhost:8000/api/v1/trading/portfolio
 
-# Get performance metrics
+# View recent logs
+docker-compose logs -f app --tail 50
+```
+
+### 2. Market Data Verification
+
+```bash
+# Test market data providers
+curl http://localhost:8000/api/v1/market/providers
+
+# Get real-time price
+curl http://localhost:8000/api/v1/market/price/AAPL
+
+# Check data sources
+curl http://localhost:8000/api/v1/market/status
+```
+
+### 3. Trading System Tests
+
+```bash
+# Check active strategies
+curl http://localhost:8000/api/v1/trading/strategies
+
+# View trading performance
 curl http://localhost:8000/api/v1/trading/performance
 
-# View recent trades
-curl http://localhost:8000/api/v1/trading/trades?limit=20
+# Check recent trades
+curl http://localhost:8000/api/v1/trading/trades?limit=10
 ```
 
-## Backup & Recovery
+## 🔒 Security Hardening
 
-### Data Backup
+### 1. Network Security
+
 ```bash
-# Create backup script
-cat > backup.sh << 'EOF'
-#!/bin/bash
-DATE=$(date +%Y%m%d-%H%M%S)
-docker-compose exec -T redis redis-cli --rdb - > backup-${DATE}.rdb
-docker-compose logs app > logs-${DATE}.txt
-tar -czf trading-backup-${DATE}.tar.gz backup-${DATE}.rdb logs-${DATE}.txt
+# UFW Firewall (Ubuntu)
+sudo ufw enable
+sudo ufw allow 22/tcp          # SSH
+sudo ufw allow 8000/tcp        # Trading API
+sudo ufw deny 6379/tcp         # Block external Redis access
+
+# Or use iptables
+sudo iptables -A INPUT -p tcp --dport 8000 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 6379 -s 127.0.0.1 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 6379 -j DROP
+```
+
+### 2. SSL/TLS Configuration (Production)
+
+```bash
+# Install Nginx for SSL termination
+sudo apt install nginx certbot python3-certbot-nginx
+
+# Get SSL certificate
+sudo certbot --nginx -d your-trading-domain.com
+
+# Nginx configuration
+cat > /etc/nginx/sites-available/trading <<EOF
+server {
+    listen 80;
+    server_name your-trading-domain.com;
+    return 301 https://\$server_name\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name your-trading-domain.com;
+    
+    ssl_certificate /etc/letsencrypt/live/your-trading-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-trading-domain.com/privkey.pem;
+    
+    location / {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+}
 EOF
 
-chmod +x backup.sh
-./backup.sh
+sudo ln -s /etc/nginx/sites-available/trading /etc/nginx/sites-enabled/
+sudo systemctl reload nginx
 ```
 
-### Recovery
+### 3. Monitoring & Alerting
+
 ```bash
-# Stop services
+# Set up log monitoring
+mkdir -p /var/log/trading
+chown $(whoami):$(whoami) /var/log/trading
+
+# Configure log rotation
+cat > /etc/logrotate.d/trading <<EOF
+/var/log/trading/*.log {
+    daily
+    rotate 30
+    compress
+    missingok
+    notifempty
+    create 644 $(whoami) $(whoami)
+}
+EOF
+```
+
+## 📊 Monitoring & Maintenance
+
+### 1. System Monitoring
+
+```bash
+# Monitor container resources
+docker stats
+
+# View system metrics
+curl http://localhost:8000/metrics
+
+# Check Redis status
+docker-compose exec redis redis-cli ping
+
+# Monitor trading activity
+watch -n 5 'curl -s http://localhost:8000/api/v1/trading/portfolio | jq'
+```
+
+### 2. Log Management
+
+```bash
+# View live logs
+docker-compose logs -f app
+
+# Search for errors
+docker-compose logs app | grep -i error
+
+# Check trading decisions
+docker-compose logs app | grep -i "trade\|buy\|sell"
+
+# Monitor P&L
+docker-compose logs app | grep -i "pnl\|profit\|loss"
+```
+
+### 3. Backup Procedures
+
+```bash
+# Backup Redis data
+docker-compose exec redis redis-cli BGSAVE
+
+# Backup configuration
+tar -czf trading-backup-$(date +%Y%m%d).tar.gz .env docker-compose.yml keys/
+
+# Backup trading data
+mkdir -p backups/$(date +%Y%m%d)
+docker-compose exec redis redis-cli --rdb backups/$(date +%Y%m%d)/dump.rdb
+```
+
+## 🚨 Emergency Procedures
+
+### Emergency Stop Trading
+```bash
+# Immediate stop (keeps system running)
+curl -X POST http://localhost:8000/api/v1/trading/stop
+
+# Complete system shutdown
 docker-compose down
 
-# Restore Redis data
-docker-compose up -d redis
-docker-compose exec -T redis redis-cli --pipe < backup-YYYYMMDD-HHMMSS.rdb
-
-# Restart application
-docker-compose up -d app
+# Force stop if unresponsive
+docker-compose kill
 ```
 
-## Security Considerations
-
-### Production Security
-1. **Change default passwords**
-2. **Use strong JWT secrets**
-3. **Enable HTTPS/TLS**
-4. **Restrict API access**
-5. **Regular security updates**
-
-### Network Security
-```yaml
-# docker-compose.yml - Production additions
-services:
-  app:
-    # Remove port mapping in production, use reverse proxy
-    # ports:
-    #   - "8000:8000"
-    expose:
-      - "8000"
-  
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./ssl:/etc/nginx/ssl
-```
-
-### Firewall Configuration
+### Disaster Recovery
 ```bash
-# Allow only necessary ports
-sudo ufw enable
-sudo ufw allow 22/tcp   # SSH
-sudo ufw allow 80/tcp   # HTTP
-sudo ufw allow 443/tcp  # HTTPS
-sudo ufw deny 8000/tcp  # Block direct access to app
+# Restore from backup
+docker-compose down
+cp trading-backup-YYYYMMDD.tar.gz .
+tar -xzf trading-backup-YYYYMMDD.tar.gz
+docker-compose up -d
+
+# Restore Redis data
+docker-compose exec redis redis-cli FLUSHALL
+docker-compose exec redis redis-cli --rdb /data/dump.rdb
 ```
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Common Issues
 
-**1. Trading System Not Starting**
+**1. Container fails to start:**
 ```bash
 # Check logs
 docker-compose logs app
 
-# Verify API keys
-curl "https://finnhub.io/api/v1/quote?symbol=AAPL&token=YOUR_API_KEY"
-
-# Check Redis connection
-docker-compose exec redis redis-cli ping
+# Rebuild image
+docker-compose build --no-cache app
+docker-compose up -d
 ```
 
-**2. No Trading Activity**
+**2. API errors:**
+```bash
+# Verify API keys
+curl -H "Authorization: Bearer $FINNHUB_API_KEY" \
+  "https://finnhub.io/api/v1/quote?symbol=AAPL&token=$FINNHUB_API_KEY"
+
+# Check environment
+docker-compose exec app env | grep API_KEY
+```
+
+**3. Trading not executing:**
 ```bash
 # Check market hours
-curl http://localhost:8000/api/v1/trading/health
-
-# Verify data providers
 curl http://localhost:8000/api/v1/market/status
 
-# Check available cash
+# Verify balance
 curl http://localhost:8000/api/v1/trading/portfolio
+
+# Check strategy status
+curl http://localhost:8000/api/v1/trading/strategies
 ```
 
-**3. High Memory Usage**
+**4. High resource usage:**
 ```bash
 # Monitor resources
-docker stats
+docker stats operation-app-1
 
-# Restart services
-docker-compose restart
-
-# Check for memory leaks
-docker-compose logs app | grep -i memory
+# Reduce symbol count
+# Edit TARGET_SYMBOLS in .env
+docker-compose restart app
 ```
 
-### Emergency Procedures
+### Performance Optimization
 
-**Stop All Trading Immediately**
 ```bash
-curl -X POST http://localhost:8000/api/v1/trading/stop
-```
-
-**Emergency Shutdown**
-```bash
-docker-compose down
-```
-
-**Data Recovery**
-```bash
-# Access Redis directly
-docker-compose exec redis redis-cli
-> KEYS portfolio:*
-> GET portfolio:main
-```
-
-## Scaling & Performance
-
-### Horizontal Scaling
-```yaml
-# docker-compose.yml - Multiple instances
-services:
+# Increase memory limits
+echo 'services:
   app:
     deploy:
-      replicas: 3
-  
-  nginx:
-    image: nginx:alpine
-    depends_on:
-      - app
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G' >> docker-compose.override.yml
+
+# Optimize Redis
+echo 'maxmemory 1gb
+maxmemory-policy allkeys-lru' > redis.conf
+
+# Restart with optimizations
+docker-compose restart
 ```
 
-### Performance Tuning
-```env
-# Environment variables
-REDIS_POOL_SIZE=50
-MAX_CONNECTIONS=100
-WORKER_PROCESSES=4
-```
+## 🎯 Production Checklist
 
-### Load Balancing
-```nginx
-# nginx.conf
-upstream trading_app {
-    server app_1:8000;
-    server app_2:8000;
-    server app_3:8000;
-}
-```
+**Pre-Deployment:**
+- [ ] API keys configured and tested
+- [ ] Secure JWT_SECRET and ADMIN_PASSWORD set
+- [ ] Firewall configured
+- [ ] SSL certificate installed (if public)
+- [ ] Backup procedures tested
+- [ ] Monitoring setup complete
 
-## Maintenance Schedule
+**Post-Deployment:**
+- [ ] Health checks passing
+- [ ] Trading system initialized
+- [ ] Market data flowing
+- [ ] Logs being captured
+- [ ] Emergency procedures documented
+- [ ] Team trained on operations
 
-### Daily Tasks
-- Monitor portfolio performance
-- Check system health
-- Review trade logs
-- Backup critical data
+**Daily Operations:**
+- [ ] Check system health
+- [ ] Review trading performance  
+- [ ] Monitor resource usage
+- [ ] Verify backup completion
+- [ ] Check error logs
 
-### Weekly Tasks
-- Update market data providers
-- Review risk parameters
-- Analyze performance metrics
-- Security updates
+---
 
-### Monthly Tasks
-- Full system backup
-- Performance optimization
-- Strategy parameter tuning
-- Capacity planning
+## 📞 Support
 
-## Support & Contact
+**First-line troubleshooting:**
+1. Check system health: `curl http://localhost:8000/health`
+2. Review recent logs: `docker-compose logs -f app --tail 100`
+3. Verify configuration: Check `.env` file for missing/incorrect values
+4. Test API keys: Use manual API calls to verify external services
 
-For technical support:
-- Check logs first: `docker-compose logs -f`
-- Review API documentation: `http://localhost:8000/docs`
-- Monitor system health: `http://localhost:8000/health`
+**Emergency contact procedures:**
+- System automatically saves state for recovery
+- All trades and positions persist in Redis
+- Emergency stop available via API
+- Complete system logs available via Docker
 
-**Remember**: This system trades with real money. Always test thoroughly in a development environment first!
+**Performance monitoring:**
+- API response times via `/metrics`
+- Trading performance via `/api/v1/trading/performance`
+- System resources via `docker stats`
+- Error rates via log analysis
+
+The system is designed to be resilient and self-recovering. Most issues can be resolved by restarting services or adjusting configuration.

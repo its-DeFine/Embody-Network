@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from decimal import Decimal
 
-from ..trading_engine import trading_engine
-from ..models import storage, Portfolio, Trade, TradingSession, PerformanceMetrics
+from ..core.trading.trading_engine import trading_engine
+from ..infrastructure.database.models import storage, Portfolio, Trade, TradingSession, PerformanceMetrics
 
 logger = logging.getLogger(__name__)
 

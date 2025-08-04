@@ -1,65 +1,109 @@
+# Environment and secrets
+.env
+.env.local
+.env.production
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
 venv/
-.env
+env/
+ENV/
 .venv
-
-# Logs
-logs/
-*.log
-trading_logs/
-trading_data/
-test_results/
-onboarding_reports/
-
-# Trading data
-trade_history_*.json
-live_trading_report_*.json
-dual_mode_*.json
-comparison_report_*.json
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
-# Docker
-docker-compose.override.yml
-.docker/
+# Logs
+*.log
+logs/
+audit_logs/
 
-# Secrets
-secrets/
-*.key
+# Data and backups
+data/
+backups/
+*.rdb
+*.dump
+*.backup
+
+# Trading data
+trades.json
+portfolio.json
+performance.json
+
+# Keys and certificates - CRITICAL SECURITY
 *.pem
+*.key
 *.crt
+keys/*-private.asc
+keys/*.key
+keys/*.sec
+keys/private/
+.gnupg/
+*.gpg
+*.pgp
+*_private_key*
+*_secret_key*
 
-# Test outputs
+# Keep only public keys and deployment scripts
+!keys/*-public.asc
+!keys/deployment-config.sh
+!keys/secure-deploy.sh
+!keys/README.md
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+
+# Coverage reports
 htmlcov/
 .coverage
-.pytest_cache/
+.coverage.*
+coverage.xml
 *.cover
+.hypothesis/
+.pytest_cache/
 
-# Build
-build/
-dist/
-*.egg-info/
-
-# Temporary
-*.tmp
-*.bak
-/tmp/
-
-# Model files (large)
-*.gguf
-*.bin
-models/control-board/node_modules/
+# Documentation builds
+_build/

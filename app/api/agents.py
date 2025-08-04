@@ -9,7 +9,7 @@ from pydantic import BaseModel
 import docker
 
 from ..dependencies import get_current_user, get_redis, get_docker
-from ..orchestrator import orchestrator, Event
+from ..core.orchestration.orchestrator import orchestrator, Event
 import logging
 
 logger = logging.getLogger(__name__)

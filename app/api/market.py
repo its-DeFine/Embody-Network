@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from datetime import datetime
 
 from .auth import get_current_user
-from ..market_data import market_data_service
+from ..core.market.market_data import market_data_service
 
 router = APIRouter(
     prefix="/api/v1/market",

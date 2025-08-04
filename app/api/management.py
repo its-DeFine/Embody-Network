@@ -18,8 +18,8 @@ from http import HTTPStatus
 from pydantic import BaseModel, Field
 
 from ..dependencies import get_redis, get_current_user
-from ..market_data import market_data_service
-from ..reliability_manager import reliability_manager
+from ..core.market.market_data import market_data_service
+from ..infrastructure.monitoring.reliability_manager import reliability_manager
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -81,6 +81,17 @@ class TradeOrder(BaseModel):
     order_type: str = "market"
     price: Optional[float] = None
     agent_id: Optional[str] = None
+
+
+class AdaptiveDirective(BaseModel):
+    """Adaptive trading directive from central manager"""
+    ai_prompt: str = Field(..., description="AI guidance prompt for trading decisions")
+    max_position_pct: float = Field(default=0.10, ge=0.01, le=0.50)
+    risk_level: str = Field(default="medium", pattern="^(low|medium|high)$")
+    allowed_strategies: List[str] = Field(default=["all"])
+    allow_shorts: bool = Field(default=True)
+    allow_leverage: bool = Field(default=False)
+    max_leverage: float = Field(default=2.0, ge=1.0, le=10.0)
 
 
 # Management Endpoints
@@ -611,6 +622,126 @@ async def get_dashboard_metrics(
         
     except Exception as e:
         logger.error(f"Error getting dashboard metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/trading/adaptive-directive")
+async def set_adaptive_directive(
+    directive: AdaptiveDirective,
+    user: dict = Depends(get_current_user),
+    redis = Depends(get_redis)
+) -> Dict[str, str]:
+    """Set adaptive trading directive from central manager"""
+    try:
+        # Import the adaptive strategy manager
+        from ..trading_strategies_adaptive import adaptive_strategy_manager
+        
+        # Update the directive
+        adaptive_strategy_manager.update_directive({
+            "ai_prompt": directive.ai_prompt,
+            "max_position_pct": directive.max_position_pct,
+            "risk_level": directive.risk_level,
+            "allowed_strategies": directive.allowed_strategies,
+            "allow_shorts": directive.allow_shorts,
+            "allow_leverage": directive.allow_leverage,
+            "max_leverage": directive.max_leverage
+        })
+        
+        # Save directive to Redis for persistence
+        directive_key = "trading:adaptive:directive"
+        await redis.hset(directive_key, mapping={
+            "ai_prompt": directive.ai_prompt,
+            "max_position_pct": str(directive.max_position_pct),
+            "risk_level": directive.risk_level,
+            "allowed_strategies": json.dumps(directive.allowed_strategies),
+            "allow_shorts": str(directive.allow_shorts).lower(),
+            "allow_leverage": str(directive.allow_leverage).lower(),
+            "max_leverage": str(directive.max_leverage),
+            "updated_at": datetime.utcnow().isoformat(),
+            "updated_by": user["username"]
+        })
+        
+        # Publish directive change event
+        await redis.publish("events:trading", json.dumps({
+            "type": "adaptive_directive_updated",
+            "directive": directive.dict(),
+            "timestamp": datetime.utcnow().isoformat(),
+            "user": user["username"]
+        }))
+        
+        logger.info(f"Adaptive directive updated by {user['username']}")
+        return {"message": "Adaptive trading directive updated successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error setting adaptive directive: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trading/adaptive-directive")
+async def get_adaptive_directive(
+    user: dict = Depends(get_current_user),
+    redis = Depends(get_redis)
+) -> Dict[str, Any]:
+    """Get current adaptive trading directive"""
+    try:
+        directive_key = "trading:adaptive:directive"
+        directive_data = await redis.hgetall(directive_key)
+        
+        if not directive_data:
+            # Return default directive
+            return {
+                "ai_prompt": "Maximize profits while managing risk appropriately",
+                "max_position_pct": 0.10,
+                "risk_level": "medium",
+                "allowed_strategies": ["all"],
+                "allow_shorts": True,
+                "allow_leverage": False,
+                "max_leverage": 2.0,
+                "updated_at": None,
+                "updated_by": None
+            }
+        
+        return {
+            "ai_prompt": directive_data.get(b"ai_prompt", b"").decode(),
+            "max_position_pct": float(directive_data.get(b"max_position_pct", 0.10)),
+            "risk_level": directive_data.get(b"risk_level", b"medium").decode(),
+            "allowed_strategies": json.loads(directive_data.get(b"allowed_strategies", b'["all"]').decode()),
+            "allow_shorts": directive_data.get(b"allow_shorts", b"true").decode() == "true",
+            "allow_leverage": directive_data.get(b"allow_leverage", b"false").decode() == "true",
+            "max_leverage": float(directive_data.get(b"max_leverage", 2.0)),
+            "updated_at": directive_data.get(b"updated_at", b"").decode(),
+            "updated_by": directive_data.get(b"updated_by", b"").decode()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting adaptive directive: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/parameters")
+async def update_trading_parameters(
+    parameters: Dict[str, Any],
+    user: dict = Depends(get_current_user),
+    redis = Depends(get_redis)
+) -> Dict[str, str]:
+    """Update trading parameters (alias for adaptive directive)"""
+    try:
+        # Convert to AdaptiveDirective format
+        directive = AdaptiveDirective(
+            ai_prompt=parameters.get("ai_prompt", "Maximize profits while managing risk appropriately"),
+            max_position_pct=parameters.get("max_position_pct", 0.10),
+            risk_level=parameters.get("risk_level", "medium"),
+            allowed_strategies=parameters.get("allowed_strategies", ["all"]),
+            allow_shorts=parameters.get("allow_shorts", True),
+            allow_leverage=parameters.get("allow_leverage", False),
+            max_leverage=parameters.get("max_leverage", 2.0)
+        )
+        
+        # Call the main directive endpoint
+        return await set_adaptive_directive(directive, user, redis)
+        
+    except Exception as e:
+        logger.error(f"Error updating trading parameters: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -1,10 +1,11 @@
 """
-AutoGen Platform - Main Application
+AutoGen Platform - Main Application (Fixed)
 
 A production-ready platform for orchestrating Microsoft AutoGen AI agents
 with focus on maintainability, observability, and scalability.
 """
 import os
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -15,15 +16,19 @@ import uvicorn
 import logging
 import structlog
 
-from .api import auth, agents, teams, tasks, gpu, market, management, trading
+from .api import auth, agents, teams, tasks, gpu, market, management, trading, master, audit, dex, ollama, security
 from .dependencies import get_redis, get_docker
-from .orchestrator import orchestrator
-from .gpu_orchestrator import gpu_orchestrator
-from .market_data import market_data_service
-from .agent_manager import agent_manager
-from .collective_intelligence import collective_intelligence
-from .websocket_manager import websocket_manager
-from .trading_strategies import strategy_manager
+from .core.orchestration.orchestrator import orchestrator
+from .core.orchestration.gpu_orchestrator import gpu_orchestrator
+from .core.market.market_data import market_data_service
+from .core.agents.agent_manager import agent_manager
+from .core.agents.collective_intelligence import collective_intelligence
+from .infrastructure.messaging.websocket_manager import websocket_manager
+from .core.trading.trading_strategies import strategy_manager
+from .infrastructure.messaging.cross_instance_bridge import cross_instance_bridge
+from .infrastructure.monitoring.audit_logger import audit_logger
+from .core.trading.dex_trading import dex_trading_engine
+from .services.ollama_integration import ollama_manager
 from .config import settings, IS_PRODUCTION, IS_DEVELOPMENT
 from .middleware import LoggingMiddleware, MetricsMiddleware
 from .errors import PlatformError, platform_exception_handler
@@ -47,8 +52,6 @@ structlog.configure(
 )
 
 logger = structlog.get_logger()
-
-# Legacy connection manager removed - using websocket_manager instead
 
 # Lifespan
 @asynccontextmanager
@@ -83,8 +86,16 @@ async def lifespan(app: FastAPI):
     # Initialize agent manager with inter-agent communication
     await agent_manager.start()
     
-    # Initialize collective intelligence system
-    await collective_intelligence.start()
+    # Initialize collective intelligence system - FIXED: Don't block on startup
+    # Create a task to start it in the background
+    async def start_collective_intelligence():
+        try:
+            logger.info("Starting collective intelligence in background...")
+            await collective_intelligence.start()
+        except Exception as e:
+            logger.warning(f"Collective intelligence startup issue (non-fatal): {e}")
+    
+    asyncio.create_task(start_collective_intelligence())
     
     # Initialize WebSocket manager for real-time updates
     await websocket_manager.start()
@@ -92,7 +103,43 @@ async def lifespan(app: FastAPI):
     # Initialize trading strategies manager
     await strategy_manager.start()
     
-    logger.info("Advanced 24/7 Trading Platform started successfully with full orchestration")
+    # Initialize audit logger
+    await audit_logger.initialize()
+    
+    # Initialize security manager
+    from .infrastructure.security.key_manager import secure_key_manager
+    await secure_key_manager.initialize()
+    logger.info("Security manager initialized with PGP support")
+    
+    # Initialize Ollama if available
+    try:
+        await ollama_manager.initialize()
+        logger.info(f"Ollama integration initialized with {len(ollama_manager.available_models)} models")
+    except Exception as e:
+        logger.warning(f"Ollama not available: {e}")
+        # Continue without Ollama - it's optional
+    
+    # Initialize DEX trading engine
+    try:
+        await dex_trading_engine.initialize()
+        logger.info("DEX trading engine initialized")
+    except Exception as e:
+        logger.warning(f"DEX trading engine initialization failed: {e}")
+        # Continue without DEX - it's optional
+    
+    # Initialize cross-instance bridge if configured
+    instance_id = os.environ.get("INSTANCE_ID")
+    master_url = os.environ.get("MASTER_URL")
+    instance_api_key = os.environ.get("INSTANCE_API_KEY")
+    
+    if instance_id and master_url and instance_api_key:
+        await cross_instance_bridge.initialize(instance_id, master_url, instance_api_key)
+        asyncio.create_task(cross_instance_bridge.start_listening())
+        logger.info("Cross-instance bridge initialized")
+    
+    logger.info("🚀 Advanced 24/7 Trading Platform started successfully!")
+    logger.info("📊 Access API docs at http://localhost:8000/docs")
+    logger.info("💰 Start trading at POST /api/v1/trading/start")
     yield
     
     # Shutdown in reverse order
@@ -139,6 +186,11 @@ app.include_router(gpu.router)
 app.include_router(market.router)
 app.include_router(management.router)  # New management API
 app.include_router(trading.router)  # 24/7 Trading API
+app.include_router(master.router)  # Master management API
+app.include_router(audit.router)  # Audit logging API
+app.include_router(dex.router)  # DEX trading API
+app.include_router(ollama.router)  # Ollama LLM API
+app.include_router(security.router)  # Security API
 
 # Health check
 @app.get("/health")
@@ -230,9 +282,8 @@ async def market_websocket(websocket: WebSocket):
         logger.error(f"Legacy market WebSocket error: {e}")
         await websocket.close()
 
-# Mount static files (UI)
-if os.path.exists("frontend/dist"):
-    app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="static")
+# API-only mode - no frontend
+# All control via Master Manager UI
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

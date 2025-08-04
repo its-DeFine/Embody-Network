@@ -1,0 +1,56 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Run security checks
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  size-check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Check PR size
+      run: |
+        # Get the number of changed files
+        CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
+        echo "Changed files: $CHANGED_FILES"
+        
+        # Warn if PR is too large
+        if [ $CHANGED_FILES -gt 50 ]; then
+          echo "::warning::This PR contains $CHANGED_FILES changed files. Consider breaking it into smaller PRs."
+        fi
+
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Check for dependency vulnerabilities
+      run: |
+        pip install safety
+        safety check -r requirements.txt || echo "::warning::Some dependencies have known vulnerabilities"

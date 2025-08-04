@@ -3,7 +3,7 @@ from typing import Optional
 import redis.asyncio as redis
 import docker
 from .config import settings
-from .orchestrator import Orchestrator
+from .core.orchestration.orchestrator import Orchestrator
 from .openbb_client import OpenBBClient
 
 class Container:

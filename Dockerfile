@@ -1,13 +1,4 @@
-# Multi-stage build for frontend and backend
-FROM node:18-alpine AS frontend-builder
-
-WORKDIR /frontend
-COPY frontend/package*.json ./
-RUN npm install
-COPY frontend/ ./
-RUN npm run build
-
-# Backend stage
+# Backend only - no frontend needed
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -33,8 +24,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY app/ /app/app/
 
-# Copy frontend build
-COPY --from=frontend-builder /frontend/dist /app/frontend/dist
+# Create data directories
+RUN mkdir -p /app/data /app/data/audit /app/backups
 
 # Expose port
 EXPOSE 8000

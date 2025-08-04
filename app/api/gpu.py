@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from datetime import datetime
 
 from .auth import get_current_user
-from ..gpu_orchestrator import gpu_orchestrator
-from ..orchestrator import Event, orchestrator
+from ..core.orchestration.gpu_orchestrator import gpu_orchestrator
+from ..core.orchestration.orchestrator import Event, orchestrator
 from ..dependencies import get_redis
 
 router = APIRouter(

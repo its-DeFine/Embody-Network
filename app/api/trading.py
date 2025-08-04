@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Dict, Any, Optional
 from decimal import Decimal
 import logging
+import asyncio
 
 from ..services.trading_service import trading_service
 from ..dependencies import get_current_user
@@ -210,6 +211,90 @@ async def get_trading_status() -> Dict[str, Any]:
             "is_running": False,
             "overall_health": "error"
         }
+
+
+@router.post("/execute")
+async def execute_trade(
+    trade_data: Dict[str, Any],
+    current_user: dict = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Execute a trade order (used by adaptive trading system)
+    """
+    try:
+        # Import trading engine
+        from ..core.trading.trading_engine import trading_engine
+        
+        # Validate trade data
+        required_fields = ["symbol", "action", "amount"]
+        for field in required_fields:
+            if field not in trade_data:
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+        
+        # Execute the trade
+        symbol = trade_data["symbol"]
+        action = trade_data["action"].lower()
+        amount = Decimal(str(trade_data["amount"]))
+        
+        # Handle special actions
+        if action == "short":
+            # Short selling
+            result = await trading_engine.open_short_position(symbol, amount)
+        elif action == "buy":
+            result = await trading_engine.buy_crypto(symbol, amount)
+        elif action == "sell":
+            result = await trading_engine.sell_crypto(symbol, amount)
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
+        
+        return {
+            "status": "success",
+            "trade_id": result.get("trade_id", "N/A"),
+            "symbol": symbol,
+            "action": action,
+            "amount": str(amount),
+            "executed_price": result.get("price", 0),
+            "timestamp": result.get("timestamp")
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error executing trade: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/account")
+async def get_account_info(
+    current_user: dict = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Get account information including balance and metrics
+    """
+    try:
+        portfolio = trading_service.get_portfolio_status()
+        performance = trading_service.get_trading_performance("all_time")
+        
+        if portfolio["status"] == "error" or performance["status"] == "error":
+            raise HTTPException(status_code=500, detail="Failed to get account info")
+        
+        portfolio_data = portfolio["data"]
+        performance_data = performance["data"]
+        
+        return {
+            "balance": portfolio_data["cash_balance"],
+            "total_pnl": portfolio_data["total_pnl"],
+            "roi_percentage": performance_data.get("roi_percentage", 0),
+            "total_trades": performance_data.get("total_trades", 0),
+            "winning_trades": performance_data.get("winning_trades", 0),
+            "losing_trades": performance_data.get("losing_trades", 0)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting account info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # WebSocket endpoint for real-time updates

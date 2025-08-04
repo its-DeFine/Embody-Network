@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from ..dependencies import get_current_user, get_redis
-from ..orchestrator import orchestrator, Event
+from ..core.orchestration.orchestrator import orchestrator, Event
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
