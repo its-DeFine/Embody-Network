@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>24/7 Autonomous Trading System - Architecture</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 40px;
+            font-size: 2.5em;
+        }
+        
+        .section {
+            margin: 40px 0;
+        }
+        
+        .section h2 {
+            color: #34495e;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        
+        /* Architecture Overview */
+        .architecture-overview {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+        
+        .central-manager {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.3);
+            min-width: 400px;
+        }
+        
+        .central-manager h3 {
+            margin: 0 0 15px 0;
+            font-size: 1.5em;
+        }
+        
+        .manager-features {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .feature {
+            background: rgba(255,255,255,0.2);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+        
+        .arrows {
+            display: flex;
+            justify-content: center;
+            gap: 50px;
+            margin: 20px 0;
+        }
+        
+        .arrow {
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 25px solid #3498db;
+        }
+        
+        .containers {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .container-box {
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            min-width: 200px;
+            box-shadow: 0 10px 25px rgba(116, 185, 255, 0.3);
+        }
+        
+        .container-box h4 {
+            margin: 0 0 15px 0;
+            font-size: 1.2em;
+        }
+        
+        .container-box ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .container-box li {
+            background: rgba(255,255,255,0.2);
+            margin: 8px 0;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.85em;
+        }
+        
+        /* Data Flow Diagram */
+        .data-flow {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+        
+        .flow-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            align-items: center;
+        }
+        
+        .flow-box {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-left: 5px solid #e74c3c;
+        }
+        
+        .flow-box.data { border-left-color: #e74c3c; }
+        .flow-box.processing { border-left-color: #f39c12; }
+        .flow-box.output { border-left-color: #27ae60; }
+        
+        .flow-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2em;
+            color: #3498db;
+        }
+        
+        /* Manager-Container Relationship */
+        .relationship-diagram {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+        
+        .relationship-grid {
+            display: grid;
+            grid-template-columns: 1fr 100px 1fr;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .manager-side {
+            background: linear-gradient(135deg, #a29bfe, #6c5ce7);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+        }
+        
+        .container-side {
+            background: linear-gradient(135deg, #fd79a8, #e84393);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+        }
+        
+        .connection {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .connection-arrow {
+            width: 60px;
+            height: 4px;
+            background: #3498db;
+            position: relative;
+        }
+        
+        .connection-arrow::after {
+            content: '';
+            position: absolute;
+            right: -8px;
+            top: -4px;
+            width: 0;
+            height: 0;
+            border-left: 12px solid #3498db;
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+        }
+        
+        .action-list {
+            list-style: none;
+            padding: 0;
+            margin: 15px 0 0 0;
+        }
+        
+        .action-list li {
+            background: rgba(255,255,255,0.2);
+            margin: 8px 0;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+        
+        /* Benefits Section */
+        .benefits {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 30px 0;
+        }
+        
+        .benefit-column {
+            background: linear-gradient(135deg, #55a3ff, #003d82);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+        }
+        
+        .benefit-column h3 {
+            margin-top: 0;
+            text-align: center;
+            font-size: 1.3em;
+        }
+        
+        .benefit-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .benefit-list li {
+            background: rgba(255,255,255,0.2);
+            margin: 12px 0;
+            padding: 12px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .benefit-icon {
+            font-size: 1.2em;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .containers {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .flow-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .relationship-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .benefits {
+                grid-template-columns: 1fr;
+            }
+            
+            .manager-features {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .highlight {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 5px solid #ff7675;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            background: #2d3436;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00cec9;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 24/7 Autonomous Trading System Architecture</h1>
+        
+        <div class="highlight">
+            <strong>💰 Real Money System:</strong> This system manages actual capital ($1,000 starting) and executes real trades 24/7 using advanced AI agents and risk management.
+        </div>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-number">$1,000</div>
+                <div class="stat-label">Starting Capital</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">24/7</div>
+                <div class="stat-label">Trading Hours</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">5</div>
+                <div class="stat-label">AI Strategies</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number">50+</div>
+                <div class="stat-label">Trading Symbols</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>🏗️ System Architecture Overview</h2>
+            <div class="architecture-overview">
+                <div class="central-manager">
+                    <h3>🏢 Central Manager</h3>
+                    <p>Main Control Hub (FastAPI Application)</p>
+                    <div class="manager-features">
+                        <div class="feature">💰 Portfolio Management</div>
+                        <div class="feature">📊 Real-time Monitoring</div>
+                        <div class="feature">⚡ API Gateway</div>
+                        <div class="feature">🛡️ Risk Management</div>
+                        <div class="feature">📈 Strategy Orchestration</div>
+                        <div class="feature">🔐 Security & Auth</div>
+                    </div>
+                </div>
+                
+                <div class="arrows">
+                    <div class="arrow"></div>
+                    <div class="arrow"></div>
+                    <div class="arrow"></div>
+                </div>
+                
+                <div class="containers">
+                    <div class="container-box">
+                        <h4>🤖 AI Agent Container</h4>
+                        <ul>
+                            <li>Collective Intelligence</li>
+                            <li>Trading Decisions</li>
+                            <li>Market Analysis</li>
+                            <li>Consensus Building</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="container-box">
+                        <h4>📊 Market Data Container</h4>
+                        <ul>
+                            <li>Real-time Prices</li>
+                            <li>Multi-provider Feed</li>
+                            <li>Rate Limiting</li>
+                            <li>Failover System</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="container-box">
+                        <h4>💼 Trade Execution Container</h4>
+                        <ul>
+                            <li>Order Processing</li>
+                            <li>P&L Tracking</li>
+                            <li>Risk Validation</li>
+                            <li>Portfolio Updates</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>🔄 Data Flow Architecture</h2>
+            <div class="data-flow">
+                <div class="flow-container">
+                    <div class="flow-box data">
+                        <h4>📥 Data Input</h4>
+                        <p><strong>Market Data Providers:</strong></p>
+                        <ul style="text-align: left; font-size: 0.9em;">
+                            <li>Yahoo Finance</li>
+                            <li>Finnhub</li>
+                            <li>Twelve Data</li>
+                            <li>Alpha Vantage</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="flow-arrow">➡️</div>
+                    
+                    <div class="flow-box processing">
+                        <h4>⚙️ Processing</h4>
+                        <p><strong>AI Analysis:</strong></p>
+                        <ul style="text-align: left; font-size: 0.9em;">
+                            <li>Technical Indicators</li>
+                            <li>Strategy Signals</li>
+                            <li>Risk Assessment</li>
+                            <li>Consensus Building</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="flow-arrow">➡️</div>
+                    
+                    <div class="flow-box output">
+                        <h4>📤 Output</h4>
+                        <p><strong>Trade Execution:</strong></p>
+                        <ul style="text-align: left; font-size: 0.9em;">
+                            <li>Buy/Sell Orders</li>
+                            <li>Portfolio Updates</li>
+                            <li>P&L Tracking</li>
+                            <li>Real-time Alerts</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>🔗 Manager ↔ Container Relationships</h2>
+            <div class="relationship-diagram">
+                <div class="relationship-grid">
+                    <div class="manager-side">
+                        <h4>Central Manager Actions</h4>
+                        <ul class="action-list">
+                            <li>🚀 Deploy new containers</li>
+                            <li>📊 Monitor health status</li>
+                            <li>⚙️ Configure parameters</li>
+                            <li>📈 Scale resources up/down</li>
+                            <li>🛑 Emergency shutdown</li>
+                            <li>🔄 Load balancing</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="connection">
+                        <div class="connection-arrow"></div>
+                        <small>Commands</small>
+                        <div class="connection-arrow" style="transform: rotate(180deg);"></div>
+                        <small>Status</small>
+                    </div>
+                    
+                    <div class="container-side">
+                        <h4>Container Responses</h4>
+                        <ul class="action-list">
+                            <li>✅ Health check responses</li>
+                            <li>📊 Performance metrics</li>
+                            <li>💹 Trading signals</li>
+                            <li>⚠️ Error notifications</li>
+                            <li>📈 Processing results</li>
+                            <li>🔄 Resource usage stats</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>🎯 Key Benefits</h2>
+            <div class="benefits">
+                <div class="benefit-column">
+                    <h3>👥 For Non-Technical Users</h3>
+                    <ul class="benefit-list">
+                        <li><span class="benefit-icon">🕒</span> Always running - never misses opportunities</li>
+                        <li><span class="benefit-icon">🤖</span> Smart AI makes better decisions than humans</li>
+                        <li><span class="benefit-icon">🛡️</span> Built-in safety prevents big losses</li>
+                        <li><span class="benefit-icon">📱</span> Real-time updates on your phone</li>
+                        <li><span class="benefit-icon">📈</span> Multiple strategies for different markets</li>
+                        <li><span class="benefit-icon">🔒</span> Bank-level security for your money</li>
+                    </ul>
+                </div>
+                
+                <div class="benefit-column">
+                    <h3>🔧 For Technical Users</h3>
+                    <ul class="benefit-list">
+                        <li><span class="benefit-icon">⚡</span> High-performance async architecture</li>
+                        <li><span class="benefit-icon">🐳</span> Docker containerization for scalability</li>
+                        <li><span class="benefit-icon">🔄</span> Event-driven microservice patterns</li>
+                        <li><span class="benefit-icon">🛡️</span> Circuit breakers and fault tolerance</li>
+                        <li><span class="benefit-icon">📊</span> Comprehensive monitoring and logging</li>
+                        <li><span class="benefit-icon">🔐</span> JWT + PGP security architecture</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>🚦 System Status & Control</h2>
+            <div class="highlight">
+                <strong>API Endpoints for System Control:</strong>
+                <ul style="margin-top: 15px;">
+                    <li><code>POST /api/v1/trading/start</code> - Start 24/7 trading with $1,000</li>
+                    <li><code>GET /api/v1/trading/portfolio</code> - Check current profits/losses</li>
+                    <li><code>GET /api/v1/management/status</code> - Full system health report</li>
+                    <li><code>POST /api/v1/agents/</code> - Deploy new AI trading agent</li>
+                    <li><code>POST /api/v1/trading/stop</code> - Emergency stop (closes all positions)</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="highlight" style="text-align: center; background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);">
+            <h3>🎯 Ready to Start Trading?</h3>
+            <p>Deploy with: <code>docker-compose up -d</code></p>
+            <p>Start trading: <code>curl -X POST "http://localhost:8000/api/v1/trading/start" -d '{"initial_capital": 1000.0}'</code></p>
+        </div>
+    </div>
+</body>
+</html>
