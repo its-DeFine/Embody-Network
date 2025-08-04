@@ -1,0 +1,246 @@
+# Multi-Host Distributed Container Deployment
+# This configuration enables containers to communicate across different physical machines
+
+version: '3.8'
+
+services:
+  # Shared Redis - Deploy this on a dedicated machine or cloud service
+  redis:
+    image: redis:7-alpine
+    container_name: autogen-redis-shared
+    command: redis-server --appendonly yes --bind 0.0.0.0
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"  # Exposed for external access
+    networks:
+      - autogen-network
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}  # Optional password
+    # Deploy on dedicated Redis machine
+    deploy:
+      placement:
+        constraints:
+          - node.labels.role == redis
+
+  # Central Manager - Deploy on main control machine
+  central-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autogen-central-manager
+    environment:
+      # External Redis URL - Replace with actual Redis machine IP
+      - REDIS_URL=redis://${REDIS_HOST:-10.0.1.100}:6379
+      - DATABASE_URL=sqlite:///./autogen.db
+      - ENABLE_DISTRIBUTED=true
+      - DISCOVERY_INTERVAL=30
+      - HEALTH_CHECK_INTERVAL=15
+      - REBALANCE_INTERVAL=300
+      
+      # Security configuration
+      - JWT_SECRET=${JWT_SECRET:-super-secret-jwt-key-for-autogen-platform-2024-32chars}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-default-admin-password-change-in-production-32chars!}
+      - MASTER_SECRET_KEY=${MASTER_SECRET_KEY:-master-secret-key-for-secure-inter-instance-comm-32chars!}
+      
+      # External network configuration
+      - EXTERNAL_IP=${CENTRAL_MANAGER_IP:-10.0.1.200}  # This machine's external IP
+      - CLUSTER_PORT=8000
+      - ENABLE_CORS=${ENABLE_CORS:-true}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      
+      # Logging
+      - LOG_LEVEL=INFO
+      
+    ports:
+      - "8000:8000"  # Exposed for external access
+    networks:
+      - autogen-network
+    volumes:
+      - ./app:/app/app
+      - ./keys:/app/keys
+    labels:
+      - "autogen.role=central-manager"
+      - "autogen.external-ip=${CENTRAL_MANAGER_IP:-10.0.1.200}"
+    # Deploy on central control machine
+    deploy:
+      placement:
+        constraints:
+          - node.labels.role == manager
+
+# Separate compose file for agent containers
+# This should be deployed on each agent machine individually
+
+---
+# Agent Container Template - Copy this section for each agent machine
+# Save as docker-compose.agent-node-1.yml on the first agent machine
+
+version: '3.8'
+
+services:
+  agent-container-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: autogen-agent-01
+    environment:
+      # Agent identification
+      - AGENT_ID=agent-container-01
+      - AGENT_TYPE=trading
+      - AGENT_PORT=8001
+      
+      # External service URLs - Replace with actual IPs
+      - REDIS_URL=redis://${REDIS_HOST:-10.0.1.100}:6379
+      - CENTRAL_MANAGER_URL=http://${CENTRAL_MANAGER_IP:-10.0.1.200}:8000
+      
+      # Security
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-default-admin-password-change-in-production-32chars!}
+      
+      # Container configuration
+      - CONTAINER_NAME=trading-node-01
+      - EXTERNAL_IP=${AGENT_1_IP:-10.0.1.201}  # This machine's external IP
+      - AGENT_CONFIG={"capabilities":["trading","market_analysis"],"max_agents":5,"external_endpoint":"http://${AGENT_1_IP:-10.0.1.201}:8001"}
+      
+      # Network configuration
+      - DISCOVERY_ENABLED=true
+      - AUTO_REGISTER=true
+      - HEARTBEAT_INTERVAL=30
+      
+    ports:
+      - "8001:8001"  # Exposed for external access
+    networks:
+      - autogen-network
+    labels:
+      - "autogen.agent.capable=true"
+      - "autogen.agent.type=trading"
+      - "autogen.external-ip=${AGENT_1_IP:-10.0.1.201}"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+networks:
+  autogen-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+volumes:
+  redis-data:
+
+---
+# Agent Container Template for second machine
+# Save as docker-compose.agent-node-2.yml on the second agent machine
+
+version: '3.8'
+
+services:
+  agent-container-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: autogen-agent-02
+    environment:
+      # Agent identification
+      - AGENT_ID=agent-container-02
+      - AGENT_TYPE=analysis
+      - AGENT_PORT=8001
+      
+      # External service URLs - Replace with actual IPs
+      - REDIS_URL=redis://${REDIS_HOST:-10.0.1.100}:6379
+      - CENTRAL_MANAGER_URL=http://${CENTRAL_MANAGER_IP:-10.0.1.200}:8000
+      
+      # Security
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-default-admin-password-change-in-production-32chars!}
+      
+      # Container configuration
+      - CONTAINER_NAME=analysis-node-01
+      - EXTERNAL_IP=${AGENT_2_IP:-10.0.1.202}  # This machine's external IP
+      - AGENT_CONFIG={"capabilities":["analysis","gpu_compute"],"max_agents":3,"external_endpoint":"http://${AGENT_2_IP:-10.0.1.202}:8001"}
+      
+      # Network configuration
+      - DISCOVERY_ENABLED=true
+      - AUTO_REGISTER=true
+      - HEARTBEAT_INTERVAL=30
+      
+    ports:
+      - "8001:8001"  # Note: Same internal port, different machine
+    networks:
+      - autogen-network
+    labels:
+      - "autogen.agent.capable=true"
+      - "autogen.agent.type=analysis"
+      - "autogen.external-ip=${AGENT_2_IP:-10.0.1.202}"
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G
+
+networks:
+  autogen-network:
+    driver: bridge
+
+---
+# Agent Container Template for third machine
+# Save as docker-compose.agent-node-3.yml on the third agent machine
+
+version: '3.8'
+
+services:
+  agent-container-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: autogen-agent-03
+    environment:
+      # Agent identification
+      - AGENT_ID=agent-container-03
+      - AGENT_TYPE=risk
+      - AGENT_PORT=8001
+      
+      # External service URLs - Replace with actual IPs
+      - REDIS_URL=redis://${REDIS_HOST:-10.0.1.100}:6379
+      - CENTRAL_MANAGER_URL=http://${CENTRAL_MANAGER_IP:-10.0.1.200}:8000
+      
+      # Security
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-default-admin-password-change-in-production-32chars!}
+      
+      # Container configuration
+      - CONTAINER_NAME=risk-node-01
+      - EXTERNAL_IP=${AGENT_3_IP:-10.0.1.203}  # This machine's external IP
+      - AGENT_CONFIG={"capabilities":["risk_analysis","compliance"],"max_agents":2,"external_endpoint":"http://${AGENT_3_IP:-10.0.1.203}:8001"}
+      
+      # Network configuration
+      - DISCOVERY_ENABLED=true
+      - AUTO_REGISTER=true
+      - HEARTBEAT_INTERVAL=30
+      
+    ports:
+      - "8001:8001"  # Note: Same internal port, different machine
+    networks:
+      - autogen-network
+    labels:
+      - "autogen.agent.capable=true"
+      - "autogen.agent.type=risk"
+      - "autogen.external-ip=${AGENT_3_IP:-10.0.1.203}"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+networks:
+  autogen-network:
+    driver: bridge

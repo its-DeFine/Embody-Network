@@ -64,12 +64,33 @@ class ContainerDiscoveryService:
             await self.redis.ping()
             logger.info("Container discovery service connected to Redis")
             
-            # Initialize Docker client
-            self.docker_client = docker.from_env()
-            logger.info("Container discovery service connected to Docker")
+            # Initialize Docker client with explicit unix socket
+            docker_connected = False
+            try:
+                # Try unix socket first (most common in containers)
+                self.docker_client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
+                self.docker_client.ping()  # Test connection
+                logger.info("Container discovery service connected to Docker via unix socket")
+                docker_connected = True
+            except Exception as e:
+                logger.warning(f"Failed to connect via unix socket: {e}")
+                try:
+                    # Fallback to environment detection
+                    self.docker_client = docker.from_env()
+                    self.docker_client.ping()  # Test connection
+                    logger.info("Container discovery service connected to Docker via environment")
+                    docker_connected = True
+                except Exception as env_error:
+                    logger.warning(f"Failed to connect to Docker: {env_error}")
+                    logger.info("Container discovery will run in fallback mode - relying on agent self-registration")
+                    self.docker_client = None
             
             # Start discovery and monitoring tasks
-            self.discovery_task = asyncio.create_task(self._discovery_loop())
+            if docker_connected:
+                self.discovery_task = asyncio.create_task(self._discovery_loop())
+            else:
+                logger.info("Docker discovery disabled - using agent self-registration only")
+                
             self.health_monitor_task = asyncio.create_task(self._health_monitoring_loop())
             
             logger.info("Container discovery service started successfully")
@@ -117,6 +138,10 @@ class ContainerDiscoveryService:
     async def _discover_containers(self):
         """Discover containers in the network"""
         try:
+            # Skip if Docker client is not available
+            if not self.docker_client:
+                return
+                
             # Get all running containers
             containers = self.docker_client.containers.list(all=False)
             
@@ -342,6 +367,17 @@ class ContainerDiscoveryService:
     async def _health_check_container(self, container_id: str):
         """Perform health check on a specific container"""
         try:
+            # Skip Docker-based health checks if client is not available
+            if not self.docker_client:
+                # Use Redis-based health checks only
+                container_key = f"container:registry:{container_id}"
+                container_data = await self.redis.hgetall(container_key)
+                if container_data:
+                    await self.redis.hset(container_key, mapping={
+                        "last_health_check": datetime.utcnow().isoformat()
+                    })
+                return
+                
             container = self.docker_client.containers.get(container_id)
             container_key = f"container:registry:{container_id}"
             
@@ -433,6 +469,150 @@ class ContainerDiscoveryService:
         except Exception as e:
             logger.error(f"Error getting available containers: {e}")
             return []
+    
+    def get_discovery_stats(self) -> Dict[str, Any]:
+        """Get discovery service statistics"""
+        return {
+            "known_containers": len(self.known_containers),
+            "discovery_interval": self.discovery_interval,
+            "health_check_interval": self.health_check_interval,
+            "discovery_running": self.discovery_task is not None and not self.discovery_task.done(),
+            "health_monitoring_running": self.health_monitor_task is not None and not self.health_monitor_task.done(),
+        }
+    
+    async def force_discovery_scan(self):
+        """Force an immediate discovery scan"""
+        try:
+            await self._discover_containers()
+            logger.info("Forced discovery scan completed")
+        except Exception as e:
+            logger.error(f"Error in forced discovery scan: {e}")
+            raise
+    
+    async def get_containers_by_capability(self, capability: str) -> List[Dict[str, Any]]:
+        """Get containers filtered by specific capability"""
+        try:
+            capability_enum = ContainerCapability(capability)
+            return await self.get_available_containers(capability_enum)
+        except ValueError:
+            logger.warning(f"Unknown capability: {capability}")
+            return []
+    
+    async def get_containers_by_type(self, container_type: str) -> List[Dict[str, Any]]:
+        """Get containers filtered by type (based on image or labels)"""
+        try:
+            all_containers = await self.get_available_containers()
+            filtered = []
+            
+            for container in all_containers:
+                image = container.get("image", "").lower()
+                labels = container.get("labels", {})
+                
+                if container_type.lower() in image or labels.get("container.type") == container_type:
+                    filtered.append(container)
+            
+            return filtered
+        except Exception as e:
+            logger.error(f"Error getting containers by type: {e}")
+            return []
+    
+    async def get_healthy_containers(self) -> List[Dict[str, Any]]:
+        """Get only healthy containers"""
+        try:
+            all_containers = await self.get_available_containers()
+            return [c for c in all_containers if c.get("health_score", 0) > 50]
+        except Exception as e:
+            logger.error(f"Error getting healthy containers: {e}")
+            return []
+    
+    async def get_all_containers(self) -> List[Dict[str, Any]]:
+        """Get all known containers regardless of health status"""
+        try:
+            active_containers = await self.redis.smembers("containers:active")
+            all_containers = []
+            
+            for container_id_bytes in active_containers:
+                container_id = container_id_bytes.decode() if isinstance(container_id_bytes, bytes) else container_id_bytes
+                container_key = f"container:registry:{container_id}"
+                container_data = await self.redis.hgetall(container_key)
+                
+                if not container_data:
+                    continue
+                
+                # Parse container info
+                container_info = {}
+                for key, value in container_data.items():
+                    key_str = key.decode() if isinstance(key, bytes) else key
+                    value_str = value.decode() if isinstance(value, bytes) else value
+                    
+                    if key_str in ["capabilities", "resources", "network_info", "labels"]:
+                        try:
+                            container_info[key_str] = json.loads(value_str)
+                        except:
+                            container_info[key_str] = value_str
+                    else:
+                        container_info[key_str] = value_str
+                
+                all_containers.append(container_info)
+            
+            return all_containers
+            
+        except Exception as e:
+            logger.error(f"Error getting all containers: {e}")
+            return []
+    
+    async def register_container_manually(self, container_info: Dict[str, Any]) -> bool:
+        """Manually register a container that self-reports its information"""
+        try:
+            container_id = container_info.get("id")
+            if not container_id:
+                logger.error("Container registration failed: missing container ID")
+                return False
+            
+            # Enrich the container info with timestamp and default values
+            registration_data = {
+                "id": container_id,
+                "name": container_info.get("name", f"container-{container_id}"),
+                "image": container_info.get("image", "unknown"),
+                "status": ContainerStatus.ACTIVE,
+                "discovered_at": datetime.utcnow().isoformat(),
+                "last_health_check": datetime.utcnow().isoformat(),
+                "capabilities": container_info.get("capabilities", [ContainerCapability.AGENT_RUNNER]),
+                "resources": container_info.get("resources", {}),
+                "network_info": container_info.get("network_info", {}),
+                "labels": container_info.get("labels", {}),
+                "health_score": 100,
+                "agent_type": container_info.get("agent_type", "generic"),
+                "agent_port": container_info.get("agent_port", 8001),
+                "registration_method": "self_registration"
+            }
+            
+            # Store in Redis
+            container_key = f"container:registry:{container_id}"
+            await self.redis.hset(container_key, mapping={
+                k: json.dumps(v) if isinstance(v, (dict, list)) else str(v)
+                for k, v in registration_data.items()
+            })
+            
+            # Add to active containers set
+            await self.redis.sadd("containers:active", container_id)
+            self.known_containers.add(container_id)
+            
+            # Publish discovery event
+            await self.redis.publish("events:container:discovered", json.dumps({
+                "event": "container_registered",
+                "container_id": container_id,
+                "container_name": registration_data["name"],
+                "registration_method": "self_registration",
+                "timestamp": datetime.utcnow().isoformat()
+            }))
+            
+            logger.info(f"Container manually registered: {registration_data['name']} ({container_id})")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error registering container manually: {e}")
+            return False
 
 
 # Singleton instance

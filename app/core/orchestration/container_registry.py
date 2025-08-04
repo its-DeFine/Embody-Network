@@ -297,7 +297,7 @@ class ContainerRegistry:
             for container_id_bytes in container_ids:
                 container_id = container_id_bytes.decode() if isinstance(container_id_bytes, bytes) else container_id_bytes
                 container_info = await self.get_container(container_id)
-                if container_info and container_info.get("status") == "active":
+                if container_info and container_info.get("status") in ["active", "ContainerStatus.ACTIVE"]:
                     containers.append(container_info)
             
             return containers
@@ -317,7 +317,7 @@ class ContainerRegistry:
                 container_info = await self.get_container(container_id)
                 
                 if container_info:
-                    if include_inactive or container_info.get("status") == "active":
+                    if include_inactive or container_info.get("status") in ["active", "ContainerStatus.ACTIVE"]:
                         containers.append(container_info)
             
             return containers

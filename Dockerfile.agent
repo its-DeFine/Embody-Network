@@ -33,6 +33,7 @@ ENV CENTRAL_MANAGER_URL=http://app:8000
 
 # Expose port for agent communication
 EXPOSE 8001
+EXPOSE 8002
 
 # Add label for agent capability detection
 LABEL autogen.agent.capable="true"

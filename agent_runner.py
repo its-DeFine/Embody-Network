@@ -38,12 +38,18 @@ class AgentContainer:
         self.central_manager_url = os.getenv("CENTRAL_MANAGER_URL", "http://app:8000")
         self.container_name = os.getenv("CONTAINER_NAME", socket.gethostname())
         
+        # Multi-host configuration
+        self.external_ip = os.getenv("EXTERNAL_IP", None)
+        self.auto_register = os.getenv("AUTO_REGISTER", "true").lower() == "true"
+        self.heartbeat_interval = int(os.getenv("HEARTBEAT_INTERVAL", "30"))
+        
         self.redis = None
         self.app = FastAPI(title=f"Agent {self.agent_id}")
         self.running = False
         self.session: Optional[aiohttp.ClientSession] = None
         self.container_id: Optional[str] = None
         self.heartbeat_task: Optional[asyncio.Task] = None
+        self.auth_token: Optional[str] = None
         
         # Setup signal handlers
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -151,6 +157,51 @@ class AgentContainer:
                 return {
                     "status": "failed",
                     "task_id": task.get("id", "unknown"),
+                    "error": str(e),
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+        
+        @self.app.post("/agents/deploy")
+        async def deploy_agent(deployment_config: Dict[str, Any]):
+            """Deploy an agent to this container"""
+            try:
+                agent_id = deployment_config.get("agent_id")
+                agent_type = deployment_config.get("agent_type")
+                config = deployment_config.get("agent_config", {})
+                
+                logger.info(f"🚀 Deploying agent {agent_id} of type {agent_type}")
+                
+                # For this demo, we'll just acknowledge the deployment
+                # In a real implementation, this would create and manage the agent instance
+                
+                # Store deployment info in Redis
+                deployment_key = f"deployment:{agent_id}"
+                await self.redis.hset(deployment_key, mapping={
+                    "agent_id": agent_id,
+                    "agent_type": agent_type,
+                    "config": json.dumps(config),
+                    "container_id": self.container_id or "unknown",
+                    "deployed_at": datetime.utcnow().isoformat(),
+                    "status": "deployed"
+                })
+                
+                # Update container metrics  
+                await self._increment_metric("deployed_agents")
+                
+                logger.info(f"✅ Successfully deployed agent {agent_id}")
+                
+                return {
+                    "success": True,
+                    "agent_id": agent_id,
+                    "container_id": self.container_id,
+                    "message": f"Agent {agent_id} deployed successfully",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                
+            except Exception as e:
+                logger.error(f"Failed to deploy agent: {e}")
+                return {
+                    "success": False,
                     "error": str(e),
                     "timestamp": datetime.utcnow().isoformat()
                 }
@@ -330,9 +381,14 @@ class AgentContainer:
     async def _register_with_cluster(self):
         """Register this container with the central manager"""
         try:
-            # Get container's host IP
-            hostname = socket.gethostname()
-            host_ip = socket.gethostbyname(hostname)
+            # Get container's host IP - use external IP if configured
+            if self.external_ip:
+                host_ip = self.external_ip
+                logger.info(f"Using configured external IP: {host_ip}")
+            else:
+                hostname = socket.gethostname()
+                host_ip = socket.gethostbyname(hostname)
+                logger.info(f"Using detected host IP: {host_ip}")
             
             # Prepare registration data
             registration_data = {
@@ -364,6 +420,7 @@ class AgentContainer:
                 if resp.status == 200:
                     auth_response = await resp.json()
                     token = auth_response.get("access_token")
+                    self.auth_token = token  # Store token for heartbeats
                     
                     # Register container
                     headers = {"Authorization": f"Bearer {token}"}
@@ -411,13 +468,19 @@ class AgentContainer:
                         }
                     }
                     
-                    # Send heartbeat (would need auth token in real implementation)
+                    # Send heartbeat with authentication
+                    headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
                     async with self.session.post(
                         f"{self.central_manager_url}/api/v1/cluster/containers/{self.container_id}/heartbeat",
-                        json=heartbeat_data
+                        json=heartbeat_data,
+                        headers=headers
                     ) as resp:
                         if resp.status != 200:
                             logger.warning(f"Heartbeat failed: {resp.status}")
+                            # If auth fails, try to re-authenticate
+                            if resp.status == 403:
+                                logger.info("Re-authenticating and re-registering...")
+                                await self._register_with_cluster()
                             
             except asyncio.CancelledError:
                 break

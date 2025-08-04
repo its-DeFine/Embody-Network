@@ -131,7 +131,7 @@ async def lifespan(app: FastAPI):
         logger.info("Container registry service started")
         
         # Start distributed agent manager
-        await distributed_agent_manager.start()
+        await distributed_agent_manager.initialize()
         logger.info("Distributed agent manager started")
     except Exception as e:
         logger.warning(f"Distributed services initialization issue: {e}")

@@ -24,7 +24,17 @@ async def get_redis():
     """Get Redis client"""
     global redis_client
     if not redis_client:
-        redis_client = await redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+        redis_url = settings.redis_url
+        redis_client = redis.from_url(redis_url)
+        try:
+            # Test the connection
+            await redis_client.ping()
+        except Exception as e:
+            # Reset client on connection failure and close if needed
+            if redis_client:
+                await redis_client.close()
+            redis_client = None
+            raise e
     return redis_client
 
 def get_docker():

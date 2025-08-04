@@ -189,6 +189,19 @@ async def register_container(
                     "capabilities": request.capabilities,
                 },
             )
+            
+            # Also register with container discovery service for manual registration
+            container_info = {
+                "id": container_id,
+                "name": request.container_name,
+                "agent_type": request.metadata.get("agent_type", "generic"),
+                "agent_port": request.api_port,
+                "capabilities": request.capabilities,
+                "resources": request.resources,
+                "network_info": {"host": request.host_address, "port": request.api_port},
+                "labels": request.metadata
+            }
+            await container_discovery_service.register_container_manually(container_info)
 
             logger.info(f"Container {container_id} registered successfully")
 
@@ -312,8 +325,8 @@ async def get_discovered_containers(
         else:
             containers = await container_discovery_service.get_all_containers()
 
-        # Convert to dict format
-        return [c.to_dict() for c in containers]
+        # Containers are already dict format
+        return containers
 
     except Exception as e:
         logger.error(f"Error getting discovered containers: {e}")
