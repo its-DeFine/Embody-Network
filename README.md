@@ -258,12 +258,19 @@ curl http://localhost:8000/health
 
 ## 📚 Documentation
 
+### Core Trading System
 - 📖 **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Complete deployment guide
 - 🏗️ **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture  
 - 💹 **[TRADING_GUIDE.md](docs/TRADING_GUIDE.md)** - Trading strategies & configuration
 - 🔧 **[OPERATIONS.md](docs/OPERATIONS.md)** - Monitoring & maintenance
 - 🔒 **[SECURITY.md](docs/SECURITY.md)** - Security configuration
 - 🆘 **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common issues & fixes
+
+### Distributed Infrastructure (Production Validated ✅)
+- 🎯 **[ORCHESTRATOR_DEPLOYMENT_PATTERN.md](docs/ORCHESTRATOR_DEPLOYMENT_PATTERN.md)** - **Production-ready orchestrator deployment** (100% validated)
+- 🌐 **[CROSS_NETWORK_DEPLOYMENT_GUIDE.md](docs/CROSS_NETWORK_DEPLOYMENT_GUIDE.md)** - Multi-infrastructure deployment
+- 🔗 **[DISTRIBUTED_CONTAINER_SYSTEM.md](docs/DISTRIBUTED_CONTAINER_SYSTEM.md)** - Distributed architecture overview
+- ⚡ **[DISTRIBUTED_QUICK_START.md](docs/DISTRIBUTED_QUICK_START.md)** - Quick start for distributed deployment
 
 ## 🎯 Performance Tracking
 
