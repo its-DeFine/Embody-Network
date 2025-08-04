@@ -45,6 +45,7 @@ class TestConfigurationSecurity:
         elif 'ADMIN_PASSWORD' in os.environ:
             del os.environ['ADMIN_PASSWORD']
     
+    @pytest.mark.security
     def test_strong_jwt_secret_accepted(self):
         """Test that strong JWT secrets are accepted"""
         os.environ['JWT_SECRET'] = 'secure-jwt-secret-that-is-32-chars-long-minimum-for-testing'
@@ -54,6 +55,7 @@ class TestConfigurationSecurity:
         assert len(settings.jwt_secret) >= 32
         assert settings.jwt_secret == os.environ['JWT_SECRET']
     
+    @pytest.mark.security
     def test_weak_jwt_secret_rejected(self):
         """Test that weak JWT secrets are rejected"""
         os.environ['ADMIN_PASSWORD'] = 'secure-admin-password-123'
@@ -76,6 +78,7 @@ class TestConfigurationSecurity:
             with pytest.raises(ValueError, match="JWT_SECRET"):
                 import app.config
     
+    @pytest.mark.security
     def test_weak_admin_password_rejected(self):
         """Test that weak admin passwords are rejected"""
         os.environ['JWT_SECRET'] = 'secure-jwt-secret-that-is-32-chars-long-minimum-for-testing'
@@ -108,6 +111,7 @@ class TestJWTSecurity:
         self.jwt_secret = 'test-jwt-secret-that-is-32-chars-long-for-comprehensive-testing'
         self.jwt_algorithm = 'HS256'
     
+    @pytest.mark.security
     def test_valid_jwt_token(self):
         """Test valid JWT token creation and validation"""
         payload = {
@@ -121,6 +125,7 @@ class TestJWTSecurity:
         assert decoded['sub'] == 'test-user'
         assert 'exp' in decoded
     
+    @pytest.mark.security
     def test_expired_jwt_token_rejected(self):
         """Test expired JWT tokens are rejected"""
         expired_payload = {
@@ -133,6 +138,7 @@ class TestJWTSecurity:
         with pytest.raises(jwt.ExpiredSignatureError):
             jwt.decode(expired_token, self.jwt_secret, algorithms=[self.jwt_algorithm])
     
+    @pytest.mark.security
     def test_invalid_signature_rejected(self):
         """Test tokens with invalid signatures are rejected"""
         payload = {
@@ -145,6 +151,7 @@ class TestJWTSecurity:
         with pytest.raises(jwt.InvalidTokenError):
             jwt.decode(token, 'wrong-secret-key', algorithms=[self.jwt_algorithm])
     
+    @pytest.mark.security
     def test_malformed_token_rejected(self):
         """Test malformed tokens are rejected"""
         malformed_tokens = [
@@ -239,6 +246,7 @@ class TestInputValidationModels:
         self.TradingStartRequest = TradingStartRequest
         self.TradeExecutionRequest = TradeExecutionRequest
     
+    @pytest.mark.security
     def test_trading_start_request_valid(self):
         """Test valid trading start requests"""
         valid_capitals = [100, 1000, 50000, 100000]
@@ -247,6 +255,7 @@ class TestInputValidationModels:
             request = self.TradingStartRequest(initial_capital=capital)
             assert request.initial_capital == capital
     
+    @pytest.mark.security
     def test_trading_start_request_invalid_low(self):
         """Test trading start request rejects low capital"""
         invalid_capitals = [0, -100, 50, 99.99]
@@ -255,6 +264,7 @@ class TestInputValidationModels:
             with pytest.raises(ValueError, match="at least"):
                 self.TradingStartRequest(initial_capital=capital)
     
+    @pytest.mark.security
     def test_trading_start_request_invalid_high(self):
         """Test trading start request rejects excessive capital"""
         invalid_capitals = [100001, 200000, 1000000]
@@ -263,6 +273,7 @@ class TestInputValidationModels:
             with pytest.raises(ValueError, match="cannot exceed"):
                 self.TradingStartRequest(initial_capital=capital)
     
+    @pytest.mark.security
     def test_trade_execution_valid(self):
         """Test valid trade execution requests"""
         valid_trades = [
@@ -277,6 +288,7 @@ class TestInputValidationModels:
             assert request.action == trade['action'].lower()
             assert request.amount == trade['amount']
     
+    @pytest.mark.security
     def test_trade_execution_invalid_symbol(self):
         """Test trade execution rejects invalid symbols"""
         invalid_symbols = [
@@ -290,6 +302,7 @@ class TestInputValidationModels:
             with pytest.raises(ValueError):
                 self.TradeExecutionRequest(symbol=symbol, action='buy', amount=1000)
     
+    @pytest.mark.security
     def test_trade_execution_invalid_action(self):
         """Test trade execution rejects invalid actions"""
         invalid_actions = ['hack', 'steal', 'manipulate', 'invalid']
@@ -302,6 +315,7 @@ class TestInputValidationModels:
         with pytest.raises(ValueError, match="Action is required"):
             self.TradeExecutionRequest(symbol='BTC-USD', action='', amount=1000)
     
+    @pytest.mark.security
     def test_trade_execution_invalid_amount(self):
         """Test trade execution rejects invalid amounts"""
         invalid_amounts = [-1000, 0, 2000000]  # negative, zero, excessive
@@ -314,11 +328,13 @@ class TestInputValidationModels:
 class TestPrivateKeySecurity:
     """Test private key security measures"""
     
+    @pytest.mark.security
     def test_private_key_removed(self):
         """Test that private key file has been removed"""
         private_key_path = '/home/geo/operation/keys/master-private.asc'
         assert not os.path.exists(private_key_path), "Private key should be removed from repository"
     
+    @pytest.mark.security
     def test_security_notice_exists(self):
         """Test that security breach notice exists"""
         notice_path = '/home/geo/operation/keys/SECURITY_BREACH_NOTICE.md'
@@ -333,6 +349,7 @@ class TestPrivateKeySecurity:
 class TestSecurityIntegration:
     """Basic integration tests for core security components"""
     
+    @pytest.mark.security
     def test_security_config_and_jwt_integration(self):
         """Test that config validation and JWT work together"""
         # Set secure environment
