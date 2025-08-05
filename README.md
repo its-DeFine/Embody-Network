@@ -21,7 +21,10 @@ git clone <repo-url>
 cd operation
 
 # 2. Configure environment  
-cp .env.example .env
+# For Central Manager:
+cp .env.central-manager .env
+# For Orchestrator Node:
+# cp .env.orchestrator .env
 # Edit .env with your API keys (see DEPLOYMENT.md)
 
 # 3. Start the system

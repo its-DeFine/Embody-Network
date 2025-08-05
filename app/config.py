@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     alpha_vantage_api_key: Optional[str] = None
     finnhub_api_key: Optional[str] = None
+    twelvedata_api_key: Optional[str] = None
+    marketstack_api_key: Optional[str] = None
     
     # Docker
     docker_network: str = "autogen-network"
@@ -48,6 +50,33 @@ class Settings(BaseSettings):
     
     # Environment
     environment: str = "development"
+    
+    # Trading Configuration
+    initial_capital: float = 1000.00
+    max_position_pct: float = 0.10
+    stop_loss_pct: float = 0.02
+    commission_pct: float = 0.001
+    target_symbols: str = "AAPL,MSFT,GOOGL,TSLA,NVDA"
+    
+    # Strategy Configuration
+    enable_mean_reversion: bool = True
+    enable_momentum: bool = True
+    enable_arbitrage: bool = True
+    enable_scalping: bool = False
+    enable_dca: bool = True
+    
+    # Risk Management
+    daily_loss_limit: float = 0.05
+    max_daily_trades: int = 50
+    confidence_threshold: float = 0.6
+    
+    # Performance Tuning
+    update_frequency: int = 30
+    rebalance_frequency: int = 3600
+    
+    # Master Configuration (for distributed systems)
+    master_secret_key: Optional[str] = None
+    enable_distributed: bool = False
     
     @validator("jwt_secret")
     def jwt_secret_required(cls, v):

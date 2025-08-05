@@ -77,9 +77,21 @@ cd operation
 
 ### 2. Environment Configuration
 
+Choose the appropriate template based on your deployment type:
+
+**For Central Manager deployment:**
 ```bash
-# Copy environment template
-cp .env.example .env
+# Copy central manager template
+cp .env.central-manager .env
+
+# Edit configuration
+nano .env
+```
+
+**For Orchestrator Node deployment:**
+```bash
+# Copy orchestrator template
+cp .env.orchestrator .env
 
 # Edit configuration
 nano .env
