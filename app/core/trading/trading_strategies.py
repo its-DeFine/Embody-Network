@@ -560,7 +560,7 @@ class DCAStrategy(TradingStrategy):
         
         default_params = {
             "investment_amount": 100.0,  # Fixed amount per interval
-            "interval_hours": 24,  # Every 24 hours
+            "interval_hours": 0.033,  # Every 2 minutes for testing (2/60 = 0.033 hours)
             "price_drop_threshold": 0.05,  # Additional buy on 5% drop
             "profit_taking_threshold": 0.20,  # Take profit at 20%
             "max_positions": 50  # Maximum number of DCA positions

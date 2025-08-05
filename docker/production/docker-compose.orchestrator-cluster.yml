@@ -5,12 +5,36 @@
 version: '3.8'
 
 services:
+  # Ollama for local AI inference
+  ollama:
+    image: ollama/ollama:latest
+    container_name: orchestrator-ollama-${ORCHESTRATOR_ID:-customer1}
+    runtime: nvidia
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    networks:
+      - orchestrator-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
   # Orchestrator Agent Cluster
   orchestrator-agent:
     build:
       context: ../..
       dockerfile: Dockerfile.agent
     container_name: orchestrator-cluster-${ORCHESTRATOR_ID:-customer1}
+    runtime: nvidia
     environment:
       # Orchestrator identification
       - AGENT_ID=orchestrator-${ORCHESTRATOR_ID:-customer1}-agent
@@ -70,7 +94,7 @@ services:
       retries: 3
       start_period: 45s
     
-    # Resource configuration (customer can adjust)
+    # Resource configuration with GPU support
     deploy:
       resources:
         limits:
@@ -79,6 +103,10 @@ services:
         reservations:
           cpus: '${CPU_RESERVATION:-2}'
           memory: ${MEMORY_RESERVATION:-2G}
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     
     labels:
       - "autogen.agent.capable=true"
@@ -93,6 +121,8 @@ volumes:
   orchestrator_logs:
     driver: local
   orchestrator_backups:
+    driver: local
+  ollama_data:
     driver: local
 
 networks:

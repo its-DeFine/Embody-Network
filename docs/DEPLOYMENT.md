@@ -7,8 +7,9 @@
 ```bash
 # Clone, configure, and start trading in one command
 git clone <repo-url> && cd operation && \
-cp .env.example .env && \
-docker-compose up -d && \
+cp .env.central-manager .env && \
+cd docker/production && \
+docker-compose -f docker-compose.central-manager.yml up -d && \
 sleep 30 && \
 curl -X POST "http://localhost:8000/api/v1/trading/start" \
   -H "Content-Type: application/json" \
@@ -148,21 +149,29 @@ chmod 600 keys/*.asc
 ### 4. Build and Deploy
 
 ```bash
-# Build application
-docker-compose build
+# Build application (from docker/production directory)
+cd docker/production
+
+# For Central Manager deployment:
+docker-compose -f docker-compose.central-manager.yml build
 
 # Start services in background
-docker-compose up -d
+docker-compose -f docker-compose.central-manager.yml up -d
+
+# For Orchestrator Node deployment:
+# docker-compose -f docker-compose.orchestrator-cluster.yml build
+# docker-compose -f docker-compose.orchestrator-cluster.yml up -d
 
 # Verify deployment
-docker-compose ps
+docker-compose -f docker-compose.central-manager.yml ps
 ```
 
 Expected output:
 ```
-NAME              COMMAND                  SERVICE   STATUS    PORTS
-operation-app-1   "uvicorn app.main:ap…"   app       running   0.0.0.0:8000->8000/tcp
-operation-redis-1 "docker-entrypoint.s…"   redis     running   0.0.0.0:6379->6379/tcp
+NAME              COMMAND                  SERVICE           STATUS    PORTS
+central-manager   "uvicorn app.main:ap…"   central-manager   running   0.0.0.0:8000->8000/tcp
+central-redis     "docker-entrypoint.s…"   redis             running   0.0.0.0:6379->6379/tcp
+central-postgres  "docker-entrypoint.s…"   postgres          running   0.0.0.0:5432->5432/tcp
 ```
 
 ### 5. Initialize Trading System
@@ -195,7 +204,8 @@ curl http://localhost:8000/api/v1/trading/status
 curl http://localhost:8000/api/v1/trading/portfolio
 
 # View recent logs
-docker-compose logs -f app --tail 50
+cd docker/production
+docker-compose -f docker-compose.central-manager.yml logs -f central-manager --tail 50
 ```
 
 ### 2. Market Data Verification
@@ -308,8 +318,8 @@ docker stats
 # View system metrics
 curl http://localhost:8000/metrics
 
-# Check Redis status
-docker-compose exec redis redis-cli ping
+# Check Redis status (from docker/production directory)
+docker-compose -f docker-compose.central-manager.yml exec redis redis-cli ping
 
 # Monitor trading activity
 watch -n 5 'curl -s http://localhost:8000/api/v1/trading/portfolio | jq'
@@ -318,31 +328,31 @@ watch -n 5 'curl -s http://localhost:8000/api/v1/trading/portfolio | jq'
 ### 2. Log Management
 
 ```bash
-# View live logs
-docker-compose logs -f app
+# View live logs (from docker/production directory)
+docker-compose -f docker-compose.central-manager.yml logs -f central-manager
 
 # Search for errors
-docker-compose logs app | grep -i error
+docker-compose -f docker-compose.central-manager.yml logs central-manager | grep -i error
 
 # Check trading decisions
-docker-compose logs app | grep -i "trade\|buy\|sell"
+docker-compose -f docker-compose.central-manager.yml logs central-manager | grep -i "trade\|buy\|sell"
 
 # Monitor P&L
-docker-compose logs app | grep -i "pnl\|profit\|loss"
+docker-compose -f docker-compose.central-manager.yml logs central-manager | grep -i "pnl\|profit\|loss"
 ```
 
 ### 3. Backup Procedures
 
 ```bash
-# Backup Redis data
-docker-compose exec redis redis-cli BGSAVE
+# Backup Redis data (from docker/production directory)
+docker-compose -f docker-compose.central-manager.yml exec redis redis-cli BGSAVE
 
 # Backup configuration
-tar -czf trading-backup-$(date +%Y%m%d).tar.gz .env docker-compose.yml keys/
+tar -czf trading-backup-$(date +%Y%m%d).tar.gz ../../.env docker-compose.*.yml ../../keys/
 
 # Backup trading data
 mkdir -p backups/$(date +%Y%m%d)
-docker-compose exec redis redis-cli --rdb backups/$(date +%Y%m%d)/dump.rdb
+docker-compose -f docker-compose.central-manager.yml exec redis redis-cli --rdb backups/$(date +%Y%m%d)/dump.rdb
 ```
 
 ## 🚨 Emergency Procedures
@@ -352,24 +362,24 @@ docker-compose exec redis redis-cli --rdb backups/$(date +%Y%m%d)/dump.rdb
 # Immediate stop (keeps system running)
 curl -X POST http://localhost:8000/api/v1/trading/stop
 
-# Complete system shutdown
-docker-compose down
+# Complete system shutdown (from docker/production directory)
+docker-compose -f docker-compose.central-manager.yml down
 
 # Force stop if unresponsive
-docker-compose kill
+docker-compose -f docker-compose.central-manager.yml kill
 ```
 
 ### Disaster Recovery
 ```bash
-# Restore from backup
-docker-compose down
+# Restore from backup (from docker/production directory)
+docker-compose -f docker-compose.central-manager.yml down
 cp trading-backup-YYYYMMDD.tar.gz .
 tar -xzf trading-backup-YYYYMMDD.tar.gz
-docker-compose up -d
+docker-compose -f docker-compose.central-manager.yml up -d
 
 # Restore Redis data
-docker-compose exec redis redis-cli FLUSHALL
-docker-compose exec redis redis-cli --rdb /data/dump.rdb
+docker-compose -f docker-compose.central-manager.yml exec redis redis-cli FLUSHALL
+docker-compose -f docker-compose.central-manager.yml exec redis redis-cli --rdb /data/dump.rdb
 ```
 
 ## 🔧 Troubleshooting
@@ -378,12 +388,12 @@ docker-compose exec redis redis-cli --rdb /data/dump.rdb
 
 **1. Container fails to start:**
 ```bash
-# Check logs
-docker-compose logs app
+# Check logs (from docker/production directory)
+docker-compose -f docker-compose.central-manager.yml logs central-manager
 
 # Rebuild image
-docker-compose build --no-cache app
-docker-compose up -d
+docker-compose -f docker-compose.central-manager.yml build --no-cache central-manager
+docker-compose -f docker-compose.central-manager.yml up -d
 ```
 
 **2. API errors:**
@@ -392,8 +402,8 @@ docker-compose up -d
 curl -H "Authorization: Bearer $FINNHUB_API_KEY" \
   "https://finnhub.io/api/v1/quote?symbol=AAPL&token=$FINNHUB_API_KEY"
 
-# Check environment
-docker-compose exec app env | grep API_KEY
+# Check environment (from docker/production directory)
+docker-compose -f docker-compose.central-manager.yml exec central-manager env | grep API_KEY
 ```
 
 **3. Trading not executing:**
@@ -411,19 +421,19 @@ curl http://localhost:8000/api/v1/trading/strategies
 **4. High resource usage:**
 ```bash
 # Monitor resources
-docker stats operation-app-1
+docker stats central-manager
 
 # Reduce symbol count
 # Edit TARGET_SYMBOLS in .env
-docker-compose restart app
+cd docker/production && docker-compose -f docker-compose.central-manager.yml restart central-manager
 ```
 
 ### Performance Optimization
 
 ```bash
-# Increase memory limits
+# Increase memory limits (from docker/production directory)
 echo 'services:
-  app:
+  central-manager:
     deploy:
       resources:
         limits:
@@ -436,7 +446,7 @@ echo 'maxmemory 1gb
 maxmemory-policy allkeys-lru' > redis.conf
 
 # Restart with optimizations
-docker-compose restart
+docker-compose -f docker-compose.central-manager.yml restart
 ```
 
 ## 🎯 Production Checklist

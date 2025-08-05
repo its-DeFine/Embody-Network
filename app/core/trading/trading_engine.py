@@ -80,10 +80,11 @@ class ArbitrageStrategy(BaseTradingStrategy):
         if not current_price:
             return None
         
-        # Random small fluctuations for demo
-        if random.random() < 0.1:  # 10% chance of signal
-            action = random.choice(["buy", "sell"])
-            target_profit = current_price * (1 + self.min_profit_pct)
+        # More frequent trading for testing - 80% chance of signal
+        if random.random() < 0.8:  # 80% chance of signal for active trading
+            # Prefer buying to build positions initially
+            action = "buy" if random.random() < 0.7 else "sell"
+            target_profit = current_price * (1 + self.min_profit_pct * 2)  # Higher target
             
             return {
                 "action": action,
@@ -91,8 +92,8 @@ class ArbitrageStrategy(BaseTradingStrategy):
                 "current_price": current_price,
                 "target_price": target_profit,
                 "strategy": "arbitrage",
-                "confidence": 0.8,
-                "expected_hold_time": 300  # 5 minutes
+                "confidence": 0.9,
+                "expected_hold_time": 180  # 3 minutes
             }
         
         return None
@@ -143,7 +144,7 @@ class DCAStrategy(BaseTradingStrategy):
     
     def __init__(self):
         super().__init__("dca")
-        self.investment_interval = timedelta(hours=4)  # Every 4 hours
+        self.investment_interval = timedelta(minutes=2)  # Every 2 minutes for testing
         self.last_investment = {}
     
     async def generate_signal(self, symbol: str, market_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -180,7 +181,12 @@ class TradingEngine:
         self.market_providers = self._initialize_providers()
         self.strategies = self._initialize_strategies()
         self.is_running = False
-        self.target_symbols = ["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA", "META", "AMZN"]
+        # Use configured target symbols instead of hardcoded ones
+        from ...config import settings
+        if hasattr(settings, 'target_symbols') and settings.target_symbols:
+            self.target_symbols = [s.strip() for s in settings.target_symbols.split(',')]
+        else:
+            self.target_symbols = ["AAPL", "MSFT", "GOOGL"]  # Default to our test symbols
         self.trade_executor = TradeExecutor()
         
     def _initialize_providers(self) -> List:
