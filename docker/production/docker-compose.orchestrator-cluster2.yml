@@ -1,0 +1,50 @@
+# Orchestrator Cluster 2 - Testing
+version: '3.8'
+
+services:
+  orchestrator-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: orchestrator-cluster2
+    environment:
+      - AGENT_ID=orchestrator-cluster2-agent
+      - AGENT_TYPE=orchestrator_cluster
+      - AGENT_PORT=8002
+      - ORCHESTRATOR_ID=cluster2
+      - REDIS_URL=redis://:secure-redis-password-change-in-production@host.docker.internal:6379
+      - CENTRAL_MANAGER_URL=http://host.docker.internal:8000
+      - ADMIN_PASSWORD=central-admin-password-change-in-production
+      - JWT_SECRET=central-manager-jwt-secret-32-chars-change-in-production
+      - CONTAINER_NAME=orchestrator-cluster2
+      - EXTERNAL_IP=localhost
+      - HOSTNAME=orchestrator-cluster2
+      - AGENT_CONFIG={"capabilities":["agent_runner","orchestrator_cluster","trading","analysis"],"max_agents":10,"orchestrator_id":"cluster2","resources":{"cpu_count":4,"memory_limit":4294967296}}
+      - AUTO_REGISTER=true
+      - DISCOVERY_ENABLED=true
+      - HEARTBEAT_INTERVAL=30
+      - HEALTH_CHECK_INTERVAL=15
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      - ENABLE_METRICS=true
+    ports:
+      - "8002:8002"
+    networks:
+      - orchestrator2-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+networks:
+  orchestrator2-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.2.0/24

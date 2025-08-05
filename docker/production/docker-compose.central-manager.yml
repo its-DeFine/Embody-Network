@@ -1,0 +1,166 @@
+# Central Manager Only - Production Deployment
+# This deploys ONLY the central manager + Redis for orchestrator coordination
+# Perfect for your infrastructure in the orchestrator deployment pattern
+
+version: '3.8'
+
+services:
+  # Redis - Shared state for orchestrator clusters
+  redis:
+    image: redis:7-alpine
+    container_name: central-redis
+    volumes:
+      - redis_data:/data
+      - redis_backup:/backup
+    ports:
+      - "6379:6379"  # Exposed for orchestrator clusters to connect
+    networks:
+      - central-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-secure-redis-password-change-in-production}", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-secure-redis-password-change-in-production}
+    # Production Redis configuration
+    command: >
+      redis-server
+      --bind 0.0.0.0
+      --requirepass ${REDIS_PASSWORD:-secure-redis-password-change-in-production}
+      --save 60 1
+      --save 300 10  
+      --save 900 100
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 4gb
+      --maxmemory-policy allkeys-lru
+      --timeout 300
+      --tcp-keepalive 60
+
+  # PostgreSQL - Persistent storage for cluster tracking
+  postgres:
+    image: postgres:15-alpine
+    container_name: central-postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - central-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U central_user -d central_manager"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      - POSTGRES_USER=central_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secure-postgres-password-change-in-production}
+      - POSTGRES_DB=central_manager
+
+  # Central Manager - Orchestrator coordination hub
+  central-manager:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: central-manager
+    environment:
+      # Redis connection
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-secure-redis-password-change-in-production}@redis:6379
+      
+      # PostgreSQL connection
+      - DATABASE_URL=postgresql://central_user:${POSTGRES_PASSWORD:-secure-postgres-password-change-in-production}@postgres:5432/central_manager
+      
+      # Distributed orchestration enabled
+      - ENABLE_DISTRIBUTED=true
+      
+      # Discovery and management intervals
+      - DISCOVERY_INTERVAL=${DISCOVERY_INTERVAL:-30}
+      - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-15}
+      - REBALANCE_INTERVAL=${REBALANCE_INTERVAL:-300}
+      - HEARTBEAT_TIMEOUT=${HEARTBEAT_TIMEOUT:-60}
+      
+      # Security configuration (CHANGE IN PRODUCTION!)
+      - JWT_SECRET=${JWT_SECRET:-central-manager-jwt-secret-32-chars-change-in-production}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-central-admin-password-change-in-production}
+      - MASTER_SECRET_KEY=${MASTER_SECRET_KEY:-central-master-secret-key-32-chars-change-in-production}
+      
+      # Network configuration for orchestrator clusters
+      - EXTERNAL_IP=${CENTRAL_MANAGER_IP:-your-central-manager-external-ip}
+      - CLUSTER_PORT=8000
+      - ENABLE_CORS=${ENABLE_CORS:-true}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      
+      # Logging and monitoring
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - ENABLE_METRICS=${ENABLE_METRICS:-true}
+      
+      # Production optimizations
+      - ENVIRONMENT=production
+      - WORKERS=${WORKERS:-4}
+      - MAX_CONNECTIONS=${MAX_CONNECTIONS:-1000}
+      
+    ports:
+      - "8000:8000"  # API for orchestrator clusters and management
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - central-network
+    volumes:
+      - central_data:/app/data
+      - central_logs:/var/log/central-manager
+      - central_backups:/app/backups
+      - ../../app:/app/app  # Mount app source code
+      - ./keys:/app/keys
+    restart: unless-stopped
+    
+    # Production health checks
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G
+    
+    labels:
+      - "autogen.role=central-manager"
+      - "autogen.component=orchestrator-hub"
+      - "autogen.external-ip=${CENTRAL_MANAGER_IP:-your-external-ip}"
+
+volumes:
+  redis_data:
+    driver: local
+  redis_backup:
+    driver: local
+  postgres_data:
+    driver: local
+  central_data:
+    driver: local
+  central_logs:
+    driver: local
+  central_backups:
+    driver: local
+
+networks:
+  central-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16

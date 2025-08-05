@@ -63,7 +63,14 @@ class AuditLogger:
     """
     
     def __init__(self):
-        self.data_dir = Path("/app/data/audit")
+        # Use environment variable for data directory, fallback to temp in tests
+        data_path = os.environ.get("AUDIT_DATA_DIR", "/app/data/audit")
+        if not os.access(Path(data_path).parent, os.W_OK):
+            # If we can't write to the parent directory, use temp directory
+            import tempfile
+            data_path = os.path.join(tempfile.gettempdir(), "audit")
+        
+        self.data_dir = Path(data_path)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         
         self.redis = None

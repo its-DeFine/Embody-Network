@@ -107,3 +107,29 @@ coverage.xml
 
 # Documentation builds
 _build/
+
+# Development artifacts and temporary files
+dashboard_state.json
+trading_dashboard_data.json
+*_output.html
+*_validation.html
+test_*.html
+dashboard.log
+server.log
+
+# Development directories (should not be in repo)
+/implement/
+/security-scan/
+
+# Generated files
+actual_dashboard.html
+dashboard_output.html
+dashboard_validation.html
+test_dashboard.html
+test_dashboard_debug.html
+trading_dashboard.html
+
+# Temporary plan files
+*_PLAN.md
+*_ROADMAP.md
+*_SUMMARY.md

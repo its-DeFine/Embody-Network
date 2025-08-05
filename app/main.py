@@ -17,6 +17,7 @@ import logging
 import structlog
 
 from .api import auth, agents, teams, tasks, gpu, market, management, trading, master, audit, dex, ollama, security, cluster
+from .api import dashboard_clean as dashboard
 from .dependencies import get_redis, get_docker
 from .core.orchestration.orchestrator import orchestrator
 from .core.orchestration.gpu_orchestrator import gpu_orchestrator
@@ -27,7 +28,7 @@ from .infrastructure.messaging.websocket_manager import websocket_manager
 from .core.trading.trading_strategies import strategy_manager
 from .infrastructure.messaging.cross_instance_bridge import cross_instance_bridge
 from .infrastructure.monitoring.audit_logger import audit_logger
-from .core.trading.dex_trading import dex_trading_engine
+# from .core.trading.dex_trading import dex_trading_engine  # Disabled due to web3 dependency
 from .services.ollama_integration import ollama_manager
 from .config import settings, IS_PRODUCTION, IS_DEVELOPMENT
 from .middleware import LoggingMiddleware, MetricsMiddleware, RateLimitMiddleware, SecurityHeadersMiddleware, TradingSecurityMiddleware
@@ -58,6 +59,12 @@ logger = structlog.get_logger()
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting AutoGen Platform...")
+    
+    # Initialize database
+    from .db_models import init_db
+    init_db()
+    logger.info("Database initialized")
+    
     redis = await get_redis()
     
     # Check Redis connection
@@ -232,6 +239,7 @@ app.include_router(dex.router)  # DEX trading API
 app.include_router(ollama.router)  # Ollama LLM API
 app.include_router(security.router)  # Security API
 app.include_router(cluster.router)  # Cluster management API
+app.include_router(dashboard.router)  # Built-in Trading Dashboard
 
 # Health check
 @app.get("/health")

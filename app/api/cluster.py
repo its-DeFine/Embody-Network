@@ -8,9 +8,14 @@ including container discovery, agent deployment, and cluster monitoring.
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+import asyncio
+import httpx
+import docker
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+import json
 
 from ..dependencies import get_current_user, get_redis
 from ..core.orchestration.container_discovery import container_discovery_service
@@ -22,13 +27,81 @@ from ..core.agents.distributed_agent_manager import (
     AgentDeploymentStrategy,
 )
 from ..infrastructure.messaging.container_hub import container_hub
+from ..db_models import get_db, register_cluster, update_heartbeat, get_active_clusters, mark_cluster_inactive
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/cluster", tags=["cluster"])
 
+# Initialize Docker client for container health checks
+try:
+    docker_client = docker.from_env()
+except Exception as e:
+    logger.warning(f"Docker client not available: {e}")
+    docker_client = None
+
 
 # Request/Response Models
+
+async def validate_cluster_health(cluster_name: str) -> Dict[str, Any]:
+    """Validate actual cluster health via container checks and health endpoints"""
+    try:
+        cluster_health = {
+            "cluster_name": cluster_name,
+            "container_status": "unknown",
+            "health_check": False,
+            "uptime": None,
+            "actual_status": "offline",
+            "error": None,
+            "last_validated": datetime.utcnow().isoformat()
+        }
+        
+        # Check if container is actually running via Docker API
+        if docker_client:
+            try:
+                container = docker_client.containers.get(cluster_name)
+                cluster_health["container_status"] = container.status
+                
+                if container.status == "running":
+                    cluster_health["uptime"] = container.attrs['State']['StartedAt']
+                    
+                    # Determine port from container name
+                    port = 8002 if "cluster2" in cluster_name else 8001
+                    
+                    # Perform health check via HTTP
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        try:
+                            health_response = await client.get(f"http://localhost:{port}/health")
+                            cluster_health["health_check"] = health_response.status_code == 200
+                            cluster_health["actual_status"] = "online" if health_response.status_code == 200 else "unhealthy"
+                        except Exception as e:
+                            logger.warning(f"Health check failed for {cluster_name}: {e}")
+                            cluster_health["health_check"] = False
+                            cluster_health["actual_status"] = "unreachable"
+                else:
+                    cluster_health["actual_status"] = "stopped"
+                    
+            except docker.errors.NotFound:
+                cluster_health["container_status"] = "not_found"
+                cluster_health["actual_status"] = "offline"
+            except Exception as e:
+                cluster_health["error"] = str(e)
+                cluster_health["actual_status"] = "error"
+        else:
+            cluster_health["error"] = "Docker client not available"
+            
+        return cluster_health
+        
+    except Exception as e:
+        logger.error(f"Error validating cluster health for {cluster_name}: {e}")
+        return {
+            "cluster_name": cluster_name,
+            "container_status": "error",
+            "health_check": False,
+            "actual_status": "error", 
+            "error": str(e),
+            "last_validated": datetime.utcnow().isoformat()
+        }
 
 
 class ContainerRegistrationRequest(BaseModel):
@@ -83,9 +156,11 @@ class ClusterActionRequest(BaseModel):
 
 @router.get("/status")
 async def get_cluster_status(
-    user: dict = Depends(get_current_user), redis=Depends(get_redis)
+    validate_health: bool = True,
+    user: dict = Depends(get_current_user), 
+    redis=Depends(get_redis)
 ) -> Dict[str, Any]:
-    """Get overall cluster status"""
+    """Get overall cluster status with optional real-time health validation"""
     try:
         # Get cluster status from container registry
         cluster_status = await container_registry.get_cluster_status()
@@ -98,6 +173,33 @@ async def get_cluster_status(
 
         # Get deployment statistics
         deployments = await distributed_agent_manager.get_all_deployments()
+
+        # Enhanced: Validate actual cluster health if requested
+        validated_clusters = {}
+        if validate_health and hub_stats.get("subscriptions"):
+            validation_tasks = []
+            for cluster_name in hub_stats["subscriptions"].keys():
+                validation_tasks.append(validate_cluster_health(cluster_name))
+            
+            # Run validations concurrently
+            validations = await asyncio.gather(*validation_tasks, return_exceptions=True)
+            
+            for validation in validations:
+                if isinstance(validation, dict) and "cluster_name" in validation:
+                    validated_clusters[validation["cluster_name"]] = validation
+
+        # Filter subscriptions to show only actually running clusters
+        if validate_health and validated_clusters:
+            active_subscriptions = {}
+            for cluster_name, subscription_data in hub_stats.get("subscriptions", {}).items():
+                cluster_validation = validated_clusters.get(cluster_name, {})
+                if cluster_validation.get("actual_status") == "online":
+                    active_subscriptions[cluster_name] = subscription_data
+            
+            # Update hub_stats with filtered subscriptions
+            hub_stats["subscriptions"] = active_subscriptions
+            hub_stats["validated_clusters"] = validated_clusters
+            hub_stats["validation_timestamp"] = datetime.utcnow().isoformat()
 
         return {
             "status": "operational",
@@ -158,6 +260,7 @@ async def register_container(
     request: ContainerRegistrationRequest,
     user: dict = Depends(get_current_user),
     redis=Depends(get_redis),
+    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Register a new container with the cluster"""
     try:
@@ -202,8 +305,23 @@ async def register_container(
                 "labels": request.metadata
             }
             await container_discovery_service.register_container_manually(container_info)
+            
+            # Register in database
+            db_cluster = register_cluster(
+                db,
+                container_id=container_id,
+                cluster_name=request.container_name,
+                agent_id=request.metadata.get("agent_id", container_id),
+                host_address=request.host_address,
+                api_port=request.api_port,
+                agent_type=request.metadata.get("agent_type", "orchestrator_cluster"),
+                external_ip=request.metadata.get("external_ip"),
+                capabilities=json.dumps(request.capabilities) if request.capabilities else None,
+                resources=json.dumps(request.resources) if request.resources else None,
+                cluster_metadata=json.dumps(request.metadata) if request.metadata else None
+            )
 
-            logger.info(f"Container {container_id} registered successfully")
+            logger.info(f"Container {container_id} registered successfully in database")
 
             return {
                 "success": True,
@@ -224,6 +342,7 @@ async def container_heartbeat(
     request: ContainerHeartbeatRequest,
     user: dict = Depends(get_current_user),
     redis=Depends(get_redis),
+    db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Update container heartbeat"""
     try:
@@ -237,6 +356,18 @@ async def container_heartbeat(
         )
 
         if success:
+            # Update heartbeat in database
+            db_success = update_heartbeat(
+                db,
+                container_id=container_id,
+                health_score=request.health_score,
+                active_agents=request.active_agents,
+                resources=json.dumps(request.resources) if request.resources else None
+            )
+            
+            if db_success:
+                logger.debug(f"Updated heartbeat for {container_id} in database")
+            
             return {"status": "acknowledged"}
         else:
             raise HTTPException(status_code=404, detail="Container not found")

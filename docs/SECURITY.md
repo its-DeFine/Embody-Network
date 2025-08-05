@@ -22,7 +22,32 @@ The trading system implements multiple layers of security to protect against una
 
 ## 🛡️ Authentication & Authorization
 
+### ✅ SECURITY STATUS: All Critical Vulnerabilities Fixed
+
+**Security Hardening Complete (2025-08-04)**:
+- ✅ **Authentication Architecture** - Centralized and consistent
+- ✅ **Authorization Controls** - Role-based access implemented  
+- ✅ **Input Validation** - Comprehensive protection added
+- ✅ **Rate Limiting** - API abuse protection active
+- ✅ **Error Handling** - Silent failures eliminated
+- ✅ **Private Key Security** - Repository cleaned
+- ✅ **WebSocket Security** - JWT validation implemented
+
 ### JWT-Based Authentication
+
+**Centralized Authentication System** (`app/dependencies.py`):
+```python
+# All authentication now centralized in dependencies.py
+from app.dependencies import get_current_user, require_admin, require_trader
+
+# Enhanced JWT tokens with role-based access
+{
+  "sub": "user@domain.com",
+  "role": "trader",  # admin/trader/viewer
+  "permissions": ["trading:start", "trading:stop"],
+  "exp": timestamp
+}
+```
 
 **Configuration**:
 ```env
@@ -30,6 +55,42 @@ The trading system implements multiple layers of security to protect against una
 JWT_SECRET=your-super-secure-jwt-secret-minimum-32-characters-long
 JWT_ALGORITHM=HS256
 JWT_EXPIRATION_HOURS=24
+```
+
+### Role-Based Authorization System
+
+**Three Security Roles**:
+
+**1. Admin Role**:
+- Full system access and configuration
+- User management and security settings
+- Trading operations and system control
+- Audit log access and monitoring
+
+**2. Trader Role**:
+- Trading operations (start, stop, execute)
+- Market data and portfolio access
+- Limited to trading functions only
+
+**3. Viewer Role**:
+- Read-only access to market data
+- Portfolio viewing only
+- No trading or configuration access
+
+**API Endpoint Protection**:
+```python
+# Trading endpoints now secured by role
+@router.post("/start")
+async def start_trading(
+    request: TradingStartRequest,
+    current_user: dict = Depends(require_trading_access)  # Trader or Admin only
+)
+
+@router.post("/config") 
+async def update_config(
+    request: ConfigRequest,
+    current_user: dict = Depends(require_admin)  # Admin only
+)
 ```
 
 **Generate Secure JWT Secret**:

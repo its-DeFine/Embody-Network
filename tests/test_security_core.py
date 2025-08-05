@@ -192,8 +192,8 @@ class TestInputValidationModels:
                     decimal_val = Decimal(str(v))
                     if decimal_val.as_tuple().exponent < -2:
                         raise ValueError("Initial capital cannot have more than 2 decimal places")
-                except:
-                    raise ValueError("Invalid capital amount format")
+                except (ValueError, TypeError, decimal.InvalidOperation) as e:
+                    raise ValueError(f"Invalid capital amount format: {e}")
                     
                 return v
         

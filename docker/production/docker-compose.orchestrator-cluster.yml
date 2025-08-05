@@ -1,0 +1,104 @@
+# Orchestrator Cluster - Customer Deployment Template
+# This is deployed by customers on their infrastructure
+# Automatically connects to your central manager
+
+version: '3.8'
+
+services:
+  # Orchestrator Agent Cluster
+  orchestrator-agent:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.agent
+    container_name: orchestrator-cluster-${ORCHESTRATOR_ID:-customer1}
+    environment:
+      # Orchestrator identification
+      - AGENT_ID=orchestrator-${ORCHESTRATOR_ID:-customer1}-agent
+      - AGENT_TYPE=orchestrator_cluster
+      - AGENT_PORT=8001
+      - ORCHESTRATOR_ID=${ORCHESTRATOR_ID:-customer1}
+      
+      # Connection to YOUR central manager (customer configures these)
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-secure-redis-password-change-in-production}@${CENTRAL_MANAGER_HOST}:6379
+      - CENTRAL_MANAGER_URL=http://${CENTRAL_MANAGER_HOST}:8000
+      
+      # Security (must match central manager)
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-central-admin-password-change-in-production}
+      - JWT_SECRET=${JWT_SECRET:-central-manager-jwt-secret-32-chars-change-in-production}
+      
+      # Container configuration
+      - CONTAINER_NAME=orchestrator-${ORCHESTRATOR_ID:-customer1}-cluster
+      - EXTERNAL_IP=${EXTERNAL_IP:-customer-external-ip}
+      - HOSTNAME=${HOSTNAME:-orchestrator-${ORCHESTRATOR_ID:-customer1}}
+      
+      # Orchestrator capabilities and limits
+      - AGENT_CONFIG={"capabilities":["agent_runner","orchestrator_cluster","trading","analysis"],"max_agents":${MAX_AGENTS:-10},"orchestrator_id":"${ORCHESTRATOR_ID:-customer1}","resources":{"cpu_count":${CPU_COUNT:-4},"memory_limit":${MEMORY_LIMIT:-4294967296}}}
+      
+      # Auto-registration with central manager
+      - AUTO_REGISTER=true
+      - DISCOVERY_ENABLED=true
+      - HEARTBEAT_INTERVAL=${HEARTBEAT_INTERVAL:-30}
+      - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-15}
+      
+      # Production optimizations
+      - ENVIRONMENT=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - ENABLE_METRICS=${ENABLE_METRICS:-true}
+      
+    ports:
+      - "${ORCHESTRATOR_PORT:-8001}:8001"  # Exposed for central manager communication
+    networks:
+      - orchestrator-network
+    
+    # Docker-to-host communication fix for central manager connection
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    volumes:
+      - orchestrator_data:/app/data
+      - orchestrator_logs:/var/log/orchestrator
+      - orchestrator_backups:/app/backups
+    
+    restart: unless-stopped
+    
+    # Health checks
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    
+    # Resource configuration (customer can adjust)
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPU_LIMIT:-4}'
+          memory: ${MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: '${CPU_RESERVATION:-2}'
+          memory: ${MEMORY_RESERVATION:-2G}
+    
+    labels:
+      - "autogen.agent.capable=true"
+      - "autogen.agent.type=orchestrator_cluster"
+      - "autogen.orchestrator.id=${ORCHESTRATOR_ID:-customer1}"
+      - "autogen.external-ip=${EXTERNAL_IP:-customer-external-ip}"
+      - "autogen.central-manager=${CENTRAL_MANAGER_HOST}"
+
+volumes:
+  orchestrator_data:
+    driver: local
+  orchestrator_logs:
+    driver: local
+  orchestrator_backups:
+    driver: local
+
+networks:
+  orchestrator-network:
+    driver: bridge
+    name: orchestrator-${ORCHESTRATOR_ID:-customer1}-network
+    ipam:
+      config:
+        - subnet: 172.35.0.0/16

@@ -323,15 +323,48 @@ class DistributedAgentManager:
         containers.sort(key=lambda c: affinity_scores.get(c["container_id"], 0), reverse=True)
         return containers[0]
     
+    async def _resolve_container_endpoint(self, container: Dict[str, Any]) -> str:
+        """Resolve container endpoint with Docker networking support"""
+        # Get the registered API endpoint
+        api_endpoint = container.get("api_endpoint")
+        
+        if api_endpoint:
+            # Check if we're running in Docker and need to adjust localhost endpoints
+            if "127.0.0.1" in api_endpoint or "localhost" in api_endpoint:
+                # Check if we're running inside Docker (check for /.dockerenv file)
+                import os
+                if os.path.exists("/.dockerenv"):
+                    # We're inside Docker - replace localhost with host.docker.internal
+                    host_address = container.get("host_address", "127.0.0.1")
+                    port = "8001"  # Default port
+                    
+                    # Extract port from endpoint if available
+                    if ":" in api_endpoint.split("//")[1]:
+                        port = api_endpoint.split(":")[-1]
+                    
+                    # Use host.docker.internal to reach host from inside Docker
+                    return f"http://host.docker.internal:{port}"
+            
+            return api_endpoint
+        else:
+            # Construct endpoint from host and port
+            host = container.get("host_address", "localhost")
+            port = container.get("api_port", 8001)
+            
+            # Apply same Docker networking logic
+            import os
+            if os.path.exists("/.dockerenv") and (host == "127.0.0.1" or host == "localhost"):
+                host = "host.docker.internal"
+            
+            return f"http://{host}:{port}"
+    
     async def _deploy_to_container(self, container: Dict[str, Any], deployment_config: Dict[str, Any]) -> Dict[str, Any]:
         """Deploy agent to specific container"""
         try:
-            # Get container API endpoint
-            api_endpoint = container.get("api_endpoint")
-            if not api_endpoint:
-                # Construct from host and port
-                host = container.get("host_address", "localhost")
-                api_endpoint = f"http://{host}:8001"
+            # Get container API endpoint with Docker networking support
+            api_endpoint = await self._resolve_container_endpoint(container)
+            
+            logger.info(f"Deploying agent to container at: {api_endpoint}")
             
             # Make deployment request to container
             timeout = aiohttp.ClientTimeout(total=30)
@@ -441,7 +474,7 @@ class DistributedAgentManager:
             if not container:
                 return None
             
-            api_endpoint = container.get("api_endpoint", f"http://{container.get('host_address')}:8001")
+            api_endpoint = await self._resolve_container_endpoint(container)
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(f"{api_endpoint}/agents/{agent_id}/state") as response:
@@ -461,7 +494,7 @@ class DistributedAgentManager:
             if not container:
                 return False
             
-            api_endpoint = container.get("api_endpoint", f"http://{container.get('host_address')}:8001")
+            api_endpoint = await self._resolve_container_endpoint(container)
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(f"{api_endpoint}/agents/{agent_id}/stop") as response:

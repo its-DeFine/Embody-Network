@@ -10,7 +10,9 @@ from pydantic import BaseModel
 import logging
 
 from ..dependencies import get_current_user
-from ..core.trading.dex_trading import dex_trading_engine
+# DEX trading temporarily disabled due to web3 dependency conflicts
+# from ..core.trading.dex_trading import dex_trading_engine
+dex_trading_engine = None
 from ..infrastructure.database.models import TradeType
 
 logger = logging.getLogger(__name__)

@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: debug-central-redis
+    ports:
+      - "6379:6379"
+
+  central-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: debug-central-manager
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - ENABLE_DISTRIBUTED=true
+      - JWT_SECRET=central-manager-jwt-secret-for-orchestrator-testing-32chars
+      - ADMIN_PASSWORD=central-admin-password-for-orchestrator-deployment-testing
+      - MASTER_SECRET_KEY=central-master-key-for-secure-orchestrator-communication-32chars
+      - LOG_LEVEL=INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    volumes:
+      - ./app:/app/app

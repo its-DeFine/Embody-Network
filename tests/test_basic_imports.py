@@ -72,20 +72,32 @@ class TestEnvironmentVariables:
             if 'ADMIN_PASSWORD' in os.environ:
                 del os.environ['ADMIN_PASSWORD']
             
-            # Clear module cache
-            if 'app.config' in sys.modules:
-                del sys.modules['app.config']
+            # Clear module cache to force re-import
+            modules_to_clear = [k for k in sys.modules.keys() if k.startswith('app.config')]
+            for module in modules_to_clear:
+                del sys.modules[module]
             
-            # Should raise validation error
-            with pytest.raises(Exception):  # Could be ValueError or ValidationError
-                import app.config
+            # Should raise validation error when trying to create Settings()
+            with pytest.raises(Exception):  # Pydantic ValidationError
+                from app.config import Settings
+                # Create Settings without loading from .env file
+                Settings(_env_file=None)  # This should fail without env vars
                 
         finally:
             # Restore env vars
             if original_jwt:
                 os.environ['JWT_SECRET'] = original_jwt
+            else:
+                os.environ['JWT_SECRET'] = 'test-jwt-secret-key-that-is-secure-32chars'
             if original_admin:
                 os.environ['ADMIN_PASSWORD'] = original_admin
+            else:
+                os.environ['ADMIN_PASSWORD'] = 'secure-admin-password-123'
+            
+            # Clear cache again to allow clean re-import
+            modules_to_clear = [k for k in sys.modules.keys() if k.startswith('app.config')]
+            for module in modules_to_clear:
+                del sys.modules[module]
 
 
 if __name__ == '__main__':

@@ -106,6 +106,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.client_requests: Dict[str, list] = {}
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        # Skip rate limiting for GET requests and monitoring endpoints
+        if (request.method == "GET" or 
+            request.url.path.startswith("/dashboard") or 
+            request.url.path.startswith("/health") or
+            request.url.path.startswith("/api/v1/cluster/status") or
+            request.url.path.startswith("/api/v1/trading/status") or
+            request.url.path.startswith("/api/v1/trading/portfolio")):
+            return await call_next(request)
+        
         client_ip = request.client.host
         current_time = time.time()
         
@@ -159,47 +168,91 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class TradingSecurityMiddleware(BaseHTTPMiddleware):
-    """Enhanced security for financial trading endpoints"""
+    """Enhanced security for financial trading endpoints with smart read/write separation"""
     
     def __init__(self, app):
         super().__init__(app)
-        self.trading_attempts: Dict[str, list] = {}
+        self.trading_write_attempts: Dict[str, list] = {}
+        self.monitoring_attempts: Dict[str, list] = {}
+        
+        # Define endpoint types
+        self.write_endpoints = {'/start', '/stop', '/execute'}
+        self.read_endpoints = {'/status', '/portfolio', '/performance', '/trades', '/positions', '/health'}
+    
+    def _is_write_operation(self, path: str) -> bool:
+        """Check if this is a write operation that should be strictly rate limited"""
+        return any(path.endswith(endpoint) for endpoint in self.write_endpoints)
+    
+    def _is_read_operation(self, path: str) -> bool:
+        """Check if this is a read operation for monitoring/dashboard"""
+        return any(path.endswith(endpoint) for endpoint in self.read_endpoints)
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # Enhanced rate limiting for trading endpoints
+        # Apply smart rate limiting for trading endpoints
         if request.url.path.startswith("/api/v1/trading/"):
             client_ip = request.client.host
             current_time = time.time()
             
-            # Initialize tracking
-            if client_ip not in self.trading_attempts:
-                self.trading_attempts[client_ip] = []
-            
-            # Clean old attempts (older than 5 minutes)
-            five_minutes_ago = current_time - 300
-            self.trading_attempts[client_ip] = [
-                attempt_time for attempt_time in self.trading_attempts[client_ip] 
-                if attempt_time > five_minutes_ago
-            ]
-            
-            # Stricter limits for trading operations (financial protection)
-            max_trading_attempts = 10  # 10 trading operations per 5 minutes
-            
-            if len(self.trading_attempts[client_ip]) >= max_trading_attempts:
-                logger.warning(
-                    f"Trading rate limit exceeded for {client_ip}: {len(self.trading_attempts[client_ip])} attempts"
-                )
-                return JSONResponse(
-                    status_code=429,
-                    content={
-                        "error": "Trading rate limit exceeded",
-                        "message": f"Maximum {max_trading_attempts} trading operations per 5 minutes allowed for financial security",
-                        "retry_after": 300
-                    },
-                    headers={"Retry-After": "300"}
-                )
-            
-            # Record this attempt
-            self.trading_attempts[client_ip].append(current_time)
+            if self._is_write_operation(request.url.path):
+                # STRICT rate limiting for trading operations (financial protection)
+                if client_ip not in self.trading_write_attempts:
+                    self.trading_write_attempts[client_ip] = []
+                
+                # Clean old attempts (older than 5 minutes)
+                five_minutes_ago = current_time - 300
+                self.trading_write_attempts[client_ip] = [
+                    attempt_time for attempt_time in self.trading_write_attempts[client_ip] 
+                    if attempt_time > five_minutes_ago
+                ]
+                
+                max_write_attempts = 10  # 10 trading operations per 5 minutes
+                
+                if len(self.trading_write_attempts[client_ip]) >= max_write_attempts:
+                    logger.warning(
+                        f"Trading write rate limit exceeded for {client_ip}: {len(self.trading_write_attempts[client_ip])} attempts"
+                    )
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "error": "Trading rate limit exceeded",
+                            "message": f"Maximum {max_write_attempts} trading operations per 5 minutes allowed for financial security",
+                            "retry_after": 300
+                        },
+                        headers={"Retry-After": "300"}
+                    )
+                
+                # Record this write attempt
+                self.trading_write_attempts[client_ip].append(current_time)
+                
+            elif self._is_read_operation(request.url.path):
+                # GENEROUS rate limiting for monitoring/dashboard operations
+                if client_ip not in self.monitoring_attempts:
+                    self.monitoring_attempts[client_ip] = []
+                
+                # Clean old attempts (older than 1 minute)
+                one_minute_ago = current_time - 60
+                self.monitoring_attempts[client_ip] = [
+                    attempt_time for attempt_time in self.monitoring_attempts[client_ip] 
+                    if attempt_time > one_minute_ago
+                ]
+                
+                max_monitoring_attempts = 100  # 100 monitoring requests per minute
+                
+                if len(self.monitoring_attempts[client_ip]) >= max_monitoring_attempts:
+                    logger.warning(
+                        f"Monitoring rate limit exceeded for {client_ip}: {len(self.monitoring_attempts[client_ip])} attempts"
+                    )
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "error": "Monitoring rate limit exceeded",
+                            "message": f"Maximum {max_monitoring_attempts} monitoring requests per minute allowed",
+                            "retry_after": 60
+                        },
+                        headers={"Retry-After": "60"}
+                    )
+                
+                # Record this monitoring attempt
+                self.monitoring_attempts[client_ip].append(current_time)
         
         return await call_next(request)

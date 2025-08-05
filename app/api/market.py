@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from datetime import datetime
 
-from .auth import get_current_user
+from ..dependencies import get_current_user
 from ..core.market.market_data import market_data_service
 
 router = APIRouter(

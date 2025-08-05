@@ -5,7 +5,7 @@
 
 ## CRITICAL ACTION REQUIRED
 
-The master PGP private key was accidentally committed to version control and has been **COMPROMISED**. 
+The master PGP private key (`master-private.asc`) was accidentally committed to version control and has been **COMPROMISED**. 
 
 ### Immediate Actions Taken:
 1. ✅ Private key removed from repository

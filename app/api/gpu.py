@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
 
-from .auth import get_current_user
+from ..dependencies import get_current_user
 from ..core.orchestration.gpu_orchestrator import gpu_orchestrator
 from ..core.orchestration.orchestrator import Event, orchestrator
 from ..dependencies import get_redis
