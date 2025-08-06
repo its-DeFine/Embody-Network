@@ -46,108 +46,8 @@ class MarketDataProvider(ABC):
         pass
 
 
-class MockMarketDataProvider(MarketDataProvider):
-    """Mock provider with realistic price movements for testing"""
-    
-    def __init__(self):
-        self.base_prices = {
-            "AAPL": 180.0,
-            "MSFT": 350.0, 
-            "GOOGL": 140.0,
-            "TSLA": 250.0,
-            "NVDA": 120.0,
-            "META": 450.0,
-            "AMZN": 150.0
-        }
-        self.price_history = {}
-        
-    async def get_current_price(self, symbol: str) -> Optional[float]:
-        """Generate realistic price with small fluctuations"""
-        import random
-        import time
-        
-        if symbol not in self.base_prices:
-            return None
-            
-        # Get last price or use base price
-        last_price = self.price_history.get(symbol, self.base_prices[symbol])
-        
-        # Add realistic price movement (-0.5% to +0.5%)
-        change_pct = random.uniform(-0.005, 0.005)
-        new_price = last_price * (1 + change_pct)
-        
-        # Store for consistency
-        self.price_history[symbol] = new_price
-        
-        logger.info(f"Mock data: {symbol} = ${new_price:.2f}")
-        return new_price
-        
-    async def get_historical_data(self, symbol: str, period: str = "1d", interval: str = "1h") -> Optional[pd.DataFrame]:
-        """Generate mock historical data"""
-        import random
-        from datetime import datetime, timedelta
-        
-        if symbol not in self.base_prices:
-            return None
-            
-        # Generate mock historical data
-        end_time = datetime.now()
-        if period == "1d":
-            start_time = end_time - timedelta(days=1)
-            freq = "1H"
-        elif period == "5d":
-            start_time = end_time - timedelta(days=5)
-            freq = "1H"
-        else:
-            start_time = end_time - timedelta(days=30)
-            freq = "1D"
-            
-        timestamps = pd.date_range(start=start_time, end=end_time, freq=freq)
-        base_price = self.base_prices[symbol]
-        
-        # Generate realistic OHLCV data
-        data = []
-        current_price = base_price
-        
-        for ts in timestamps:
-            # Random walk with mean reversion
-            change = random.uniform(-0.02, 0.02)  # -2% to +2%
-            current_price = current_price * (1 + change)
-            
-            # Generate OHLCV
-            open_price = current_price * random.uniform(0.995, 1.005)
-            high_price = current_price * random.uniform(1.0, 1.02)
-            low_price = current_price * random.uniform(0.98, 1.0)
-            close_price = current_price
-            volume = random.randint(1000000, 10000000)
-            
-            data.append({
-                "Open": open_price,
-                "High": high_price,
-                "Low": low_price,
-                "Close": close_price,
-                "Volume": volume
-            })
-            
-        df = pd.DataFrame(data, index=timestamps)
-        return df
-        
-    async def get_quote(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Generate mock quote data"""
-        import random
-        price = await self.get_current_price(symbol)
-        if not price:
-            return None
-            
-        return {
-            "symbol": symbol,
-            "price": price,
-            "open": price * 0.995,
-            "high": price * 1.01,
-            "low": price * 0.99,
-            "volume": random.randint(1000000, 10000000),
-            "timestamp": datetime.utcnow().isoformat()
-        }
+# Note: Mock provider has been moved to tests/mocks/market_data_mock.py
+# For testing, import from: tests.mocks.market_data_mock import MockMarketDataProvider
 
 
 class YahooFinanceProvider(MarketDataProvider):
@@ -318,6 +218,9 @@ class MarketDataService:
     """Main market data service with caching and fallback support"""
     
     def __init__(self):
+        # Check if we're in test mode
+        self.is_test_mode = os.getenv("ENVIRONMENT", "production").lower() in ["test", "testing", "development"]
+        
         # Import alternative providers
         try:
             from .market_data_providers import (
@@ -332,7 +235,6 @@ class MarketDataService:
             
             # Traditional stock providers
             self.providers = {
-                "mock": MockMarketDataProvider(),
                 "yahoo": YahooFinanceProvider(),
                 "alpha_vantage": AlphaVantageProvider(),
                 "twelvedata": TwelveDataProvider(FREE_API_KEYS.get("twelvedata", "demo")),
@@ -350,24 +252,37 @@ class MarketDataService:
                 "chainlink": crypto_data_service  # Blockchain oracle data
             }
             
+            # Add mock provider only in test mode
+            if self.is_test_mode:
+                from tests.mocks.market_data_mock import MockMarketDataProvider
+                self.providers["mock"] = MockMarketDataProvider()
+            
             # Combined providers
             self.all_providers = {**self.providers, **self.crypto_providers}
             
-            self.primary_provider = "mock"  # For stocks - no rate limits
+            self.primary_provider = "yahoo" if not self.is_test_mode else "mock"  # Use real provider in production
             self.primary_crypto_provider = "coingecko"  # For crypto
             self.fallback_order = ["yahoo", "twelvedata", "finnhub", "marketstack", "polygon", "alpha_vantage"]
             self.crypto_fallback_order = ["binance", "cryptocompare", "coinbase", "chainlink"]
             
         except ImportError:
-            # Fallback if providers not available - but always include mock
+            # Fallback if providers not available
             self.providers = {
-                "mock": MockMarketDataProvider(),
                 "yahoo": YahooFinanceProvider(),
                 "alpha_vantage": AlphaVantageProvider()
             }
+            
+            # Add mock only in test mode
+            if self.is_test_mode:
+                try:
+                    from tests.mocks.market_data_mock import MockMarketDataProvider
+                    self.providers["mock"] = MockMarketDataProvider()
+                except ImportError:
+                    logger.warning("Mock provider not available in test mode")
+            
             self.crypto_providers = {}
             self.all_providers = self.providers
-            self.primary_provider = "mock"  # Use mock even in fallback mode
+            self.primary_provider = "yahoo" if not self.is_test_mode else "mock"
             self.primary_crypto_provider = None
             self.fallback_order = ["yahoo", "alpha_vantage"]
             self.crypto_fallback_order = []

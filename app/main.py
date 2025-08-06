@@ -18,6 +18,7 @@ import structlog
 
 from .api import auth, agents, teams, tasks, gpu, market, management, trading, master, audit, dex, ollama, security, cluster
 from .api import dashboard_clean as dashboard
+from .api.v1 import oracle
 from .dependencies import get_redis, get_docker
 from .core.orchestration.orchestrator import orchestrator
 from .core.orchestration.gpu_orchestrator import gpu_orchestrator
@@ -89,6 +90,11 @@ async def lifespan(app: FastAPI):
     
     # Initialize market data service
     await market_data_service.initialize()
+    
+    # Initialize Oracle Manager as the central oracle
+    from .core.oracle import oracle_manager
+    await oracle_manager.initialize()
+    logger.info("Oracle Manager initialized as central oracle")
     
     # Initialize agent manager with inter-agent communication
     await agent_manager.start()
@@ -231,6 +237,7 @@ app.include_router(teams.router)
 app.include_router(tasks.router)
 app.include_router(gpu.router)
 app.include_router(market.router)
+app.include_router(oracle.router)  # Oracle Manager API - central oracle for market data
 app.include_router(management.router)  # New management API
 app.include_router(trading.router)  # 24/7 Trading API
 app.include_router(master.router)  # Master management API

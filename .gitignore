@@ -1,7 +1,9 @@
 # Environment and secrets
 .env
+.env.*
 .env.local
 .env.production
+.env.orchestrator-local
 
 # Python
 __pycache__/
