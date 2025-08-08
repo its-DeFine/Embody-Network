@@ -25,7 +25,6 @@ from fastapi import WebSocket, WebSocketDisconnect
 import redis.asyncio as redis
 
 from ...dependencies import get_redis
-from ...core.market.market_data import market_data_service
 from ...core.agents.agent_manager import agent_manager
 
 logger = logging.getLogger(__name__)

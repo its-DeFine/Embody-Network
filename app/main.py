@@ -16,7 +16,7 @@ import uvicorn
 import logging
 import structlog
 
-from .api import auth, agents, teams, tasks, gpu, management, master, audit, ollama, security, cluster
+from .api import auth, agents, teams, tasks, gpu, management, master, audit, ollama, security, cluster, vtuber
 from .api import dashboard_clean as dashboard
 from .dependencies import get_redis, get_docker
 from .core.orchestration.orchestrator import orchestrator
@@ -219,7 +219,8 @@ app.include_router(audit.router)  # Audit logging API
 app.include_router(ollama.router)  # Ollama LLM API
 app.include_router(security.router)  # Security API
 app.include_router(cluster.router)  # Cluster management API
-app.include_router(dashboard.router)  # Built-in Trading Dashboard
+app.include_router(vtuber.router)  # VTuber control API
+app.include_router(dashboard.router)  # Built-in Dashboard
 
 # Health check
 @app.get("/health")

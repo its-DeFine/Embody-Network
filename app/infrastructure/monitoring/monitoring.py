@@ -9,7 +9,6 @@ from typing import Dict, Any, List, Optional
 import psutil
 import os
 
-from ...services.trading_service import trading_service
 from ..database.models import storage
 
 logger = logging.getLogger(__name__)

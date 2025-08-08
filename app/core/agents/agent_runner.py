@@ -14,7 +14,6 @@ from typing import Optional
 
 from ...dependencies import get_redis
 from ...infrastructure.database.models import AgentType
-from ..trading.trading_strategies import ArbitrageStrategy, ScalpingStrategy, DCAStrategy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
