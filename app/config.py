@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     
     # Docker
-    docker_network: str = "autogen-network"
-    agent_image: str = "autogen-agent:latest"
+    docker_network: str = "vtuber_network"
+    agent_image: str = "autogen_agent_with_neo4j:latest"
     agent_memory_limit: str = "1g"
     agent_cpu_limit: float = 1.0
     

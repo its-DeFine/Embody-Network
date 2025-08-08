@@ -9,6 +9,7 @@ from pydantic import BaseModel
 import docker
 
 from ..dependencies import get_current_user, get_redis, get_docker
+from ..config import settings
 from ..core.orchestration.orchestrator import orchestrator, Event
 import logging
 
@@ -114,18 +115,35 @@ async def start_agent(
     # Try to start container
     try:
         docker_client = get_docker()
+        image = settings.agent_image
+        network = settings.docker_network
+
+        logger.info(
+            "Starting agent container",
+            extra={
+                "agent_id": agent_id,
+                "image": image,
+                "network": network,
+                "agent_type": str(agent["type"]),
+            },
+        )
+
         container = docker_client.containers.run(
-            "autogen-agent:latest",
+            image,
             detach=True,
             name=f"agent-{agent_id}",
             environment={
                 "AGENT_ID": agent_id,
                 "AGENT_TYPE": agent["type"],
                 "AGENT_CONFIG": json.dumps(agent["config"]),
-                "REDIS_URL": "redis://redis:6379"
+                "REDIS_URL": settings.redis_url,
             },
-            network="platform-network",
-            restart_policy={"Name": "unless-stopped"}
+            network=network,
+            restart_policy={"Name": "unless-stopped"},
+            labels={
+                "autogen.agent.capable": "true",
+                "container.type": "agent",
+            },
         )
         
         # Update status
@@ -137,7 +155,7 @@ async def start_agent(
         
     except Exception as e:
         # Fallback: simulate agent start without Docker
-        logger.warning(f"Docker not available, simulating agent start: {e}")
+        logger.warning(f"Docker not available or failed to start agent: {e}")
         agent["status"] = "running"
         agent["container_id"] = f"simulated-{agent_id}"
         await redis.set(f"agent:{agent_id}", json.dumps(agent))

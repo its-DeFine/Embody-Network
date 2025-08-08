@@ -6,12 +6,16 @@ import httpx
 import logging
 
 from ..config import settings
-from ..dependencies import get_redis
+from ..dependencies import get_redis, get_current_user
 from ..core.orchestration.orchestrator import orchestrator
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/vtuber", tags=["VTuber Control"])
+router = APIRouter(
+    prefix="/api/v1/vtuber",
+    tags=["VTuber Control"],
+    dependencies=[Depends(get_current_user)]
+)
 
 
 class StimulusRequest(BaseModel):

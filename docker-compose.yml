@@ -22,12 +22,11 @@ services:
       - PLAYER_PORT=5001
       - USE_REDIS_SCB=true
       - REDIS_URL=redis://redis_scb:6379/0
-      - LLM_PROVIDER=openai
+      - LLM_PROVIDER=ollama
       - OLLAMA_HOST=http://vtuber-ollama:11434
       - OLLAMA_MODEL=llama3.1:8b
-      - OPENAI_MODEL=gpt-4o
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - TTS_PROVIDER=kokoro
+      - KOKORO_TTS_SERVER_URL=http://kokoro_tts:8880
       - VTUBER_PAYMENT_ENABLED=false
       - ORCHESTRATOR_VERSION=reactive
       - AUTONOMOUS_ORCHESTRATION_ENABLED=false
@@ -48,7 +47,7 @@ services:
     volumes:
       - ./autonomy/docker-vtuber/app/AVATAR/NeuroBridge:/app/NeuroBridge
     env_file:
-      - .env
+      - autonomy/.env.autonomy.dev
     depends_on:
       - redis_scb
       - vtuber-ollama
@@ -102,7 +101,7 @@ services:
       - CONVERSATION_STORAGE_ENABLED=true
       - REDIS_SCB_URL=redis://redis_scb:6379/0
     env_file:
-      - .env
+      - autonomy/.env.autonomy.dev
     ports:
       - "8200:8000"
     networks:
@@ -212,6 +211,29 @@ services:
       start_period: 10s
       retries: 3
     restart: unless-stopped
+
+  # Central Manager API (this repo)
+  central_manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: central_manager
+    env_file:
+      - .env.manager.dev
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "8000:8000"
+    networks:
+      - vtuber_network
+    depends_on:
+      - redis_scb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # ===========================================
   # INFRASTRUCTURE SERVICES

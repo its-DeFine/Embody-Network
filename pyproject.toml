@@ -1,0 +1,38 @@
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+exclude = "(\.venv|venv|build|dist|.mypy_cache|.pytest_cache)"
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E203", "W503"]
+exclude = [
+  "venv",
+  ".venv",
+  "build",
+  "dist",
+  "__pycache__",
+  ".mypy_cache",
+  ".pytest_cache",
+]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+no_implicit_optional = true
+strict_optional = true
+show_error_context = true
+pretty = true
+
+
