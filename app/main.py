@@ -195,7 +195,6 @@ app = FastAPI(
 app.add_middleware(MetricsMiddleware)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(TradingSecurityMiddleware)
 app.add_middleware(RateLimitMiddleware, requests_per_minute=60)  # Conservative rate limiting
 app.add_middleware(
     CORSMiddleware,
