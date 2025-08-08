@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     """Application settings with environment variable support"""
     
     # API Settings
-    api_title: str = "AutoGen Platform"
+    api_title: str = "VTuber Autonomy Platform"
     api_version: str = "1.0.0"
     api_prefix: str = "/api/v1"
     
@@ -22,16 +22,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     redis_pool_size: int = 10
     
-    # OpenBB
-    openbb_url: Optional[str] = None
-    openbb_api_key: Optional[str] = None
-    
-    # Market Data API Keys
+    # OpenAI API Keys (for VTuber LLM)
     openai_api_key: Optional[str] = None
-    alpha_vantage_api_key: Optional[str] = None
-    finnhub_api_key: Optional[str] = None
-    twelvedata_api_key: Optional[str] = None
-    marketstack_api_key: Optional[str] = None
     
     # Docker
     docker_network: str = "autogen-network"
@@ -51,28 +43,15 @@ class Settings(BaseSettings):
     # Environment
     environment: str = "development"
     
-    # Trading Configuration
-    initial_capital: float = 1000.00
-    max_position_pct: float = 0.10
-    stop_loss_pct: float = 0.02
-    commission_pct: float = 0.001
-    target_symbols: str = "AAPL,MSFT,GOOGL,TSLA,NVDA"
-    
-    # Strategy Configuration
-    enable_mean_reversion: bool = True
-    enable_momentum: bool = True
-    enable_arbitrage: bool = True
-    enable_scalping: bool = False
-    enable_dca: bool = True
-    
-    # Risk Management
-    daily_loss_limit: float = 0.05
-    max_daily_trades: int = 50
-    confidence_threshold: float = 0.6
+    # VTuber Configuration
+    vtuber_enabled: bool = True
+    vtuber_host: str = "neurosync_s1"
+    vtuber_port: int = 5001
+    autogen_host: str = "autogen_agent"
+    autogen_port: int = 8000
     
     # Performance Tuning
     update_frequency: int = 30
-    rebalance_frequency: int = 3600
     
     # Master Configuration (for distributed systems)
     master_secret_key: Optional[str] = None

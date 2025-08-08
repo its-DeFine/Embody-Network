@@ -1,0 +1,484 @@
+services:
+  # ===========================================
+  # CORE VTUBER SERVICES FROM AUTONOMY
+  # ===========================================
+  
+  # NeuroSync S1 - VTuber Avatar System
+  neurosync_s1:
+    mem_limit: 12g
+    build:
+      context: /home/geo/directories/autonomy/docker-vtuber
+      dockerfile: ./app/AVATAR/NeuroBridge/dockerfile
+      no_cache: true
+    container_name: neurosync_s1
+    command: [/app/entrypoint_bridge.sh]
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+    environment:
+      - FLASK_HOST=0.0.0.0
+      - PYTHONUNBUFFERED=1
+      - ALLOWED_ORIGINS=*
+      - PLAYER_PORT=5001
+      - USE_REDIS_SCB=true
+      - REDIS_URL=redis://redis_scb:6379/0
+      - LLM_PROVIDER=openai
+      - OLLAMA_HOST=http://vtuber-ollama:11434
+      - OLLAMA_MODEL=llama3.1:8b
+      - OPENAI_MODEL=gpt-4o
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - VTUBER_PAYMENT_ENABLED=false
+      - ORCHESTRATOR_VERSION=reactive
+      - AUTONOMOUS_ORCHESTRATION_ENABLED=false
+      - AUTONOMOUS_SPEECH_ENABLED=false
+      - AUTONOMOUS_CONTENT_ENABLED=false
+      - AUTONOMOUS_ENVIRONMENT_ENABLED=false
+      - AUTO_INTERRUPT_ENABLED=false
+      - SIMPLE_SPEECH_ENABLED=false
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - vtuber_network
+    volumes:
+      - /home/geo/directories/autonomy/docker-vtuber/app/AVATAR/NeuroBridge:/app/NeuroBridge
+    env_file:
+      - .env
+    depends_on:
+      - redis_scb
+      - vtuber-ollama
+      - kokoro_tts
+    restart: unless-stopped
+
+  # AutoGen Multi-Agent System (S2)
+  autogen_agent:
+    image: autogen_agent_with_neo4j:latest
+    container_name: autogen_agent
+    command: sh -c "pip install 'neo4j>=5.0.0' 'fastembed>=0.4.0' && python -m autogen_agent.simplified_main"
+    volumes:
+      - /home/geo/directories/autonomy/docker-vtuber/app/CORE/autogen-agent/autogen_agent:/app/autogen_agent
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@autogen_postgres:5432/autonomous_agent
+      - USE_COGNITIVE_ENHANCEMENT=true
+      - USE_AUTOGEN_LLM=true
+      - STANDALONE_MODE=true
+      - LOOP_INTERVAL=30
+      - LOG_LEVEL=INFO
+      - PORT=8000
+      - OLLAMA_HOST=http://vtuber-ollama:11434
+      - USE_OLLAMA=true
+      - OLLAMA_MODEL=llama3.1:8b
+      - VTUBER_ENDPOINT_URL=http://neurosync_s1:5001
+      - VTUBER_ENDPOINT=http://neurosync_s1:5001
+      - S1_AVATAR_ENDPOINT=http://neurosync_s1:5001
+      - OPENAI_MODEL=gpt-4o-mini
+      - NEO4J_URI=bolt://autogen_neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password123
+      - LLM_PROVIDER=ollama
+      - LLM_MODEL=llama3.1
+      - LLM_API_KEY=ollama
+      - LLM_ENDPOINT=http://vtuber-ollama:11434/v1
+      - LLM_TEMPERATURE=0.1
+      - LLM_MAX_TOKENS=2048
+      - INSTRUCTOR_MODE=json_mode
+      - INSTRUCTOR_MAX_RETRIES=1
+      - DARWIN_GODEL_REAL_MODIFICATIONS=true
+      - DARWIN_GODEL_REQUIRE_APPROVAL=false
+      - DARWIN_GODEL_PERFORMANCE_THRESHOLD=10
+      - DARWIN_GODEL_BACKUP_RETENTION_DAYS=30
+      - DARWIN_GODEL_MAX_MODIFICATIONS_PER_CYCLE=3
+      - MAX_CONSECUTIVE_AUTO_REPLY=10
+      - MAX_ROUNDS=20
+      - ENABLE_CONTINUOUS_EVOLUTION=true
+      - STATISTICS_PERSISTENCE_ENABLED=true
+      - STATISTICS_RETENTION_DAYS=90
+      - STATISTICS_BATCH_SIZE=100
+      - CONVERSATION_STORAGE_ENABLED=true
+      - REDIS_SCB_URL=redis://redis_scb:6379/0
+    env_file:
+      - .env
+    ports:
+      - "8200:8000"
+    networks:
+      - vtuber_network
+    depends_on:
+      - autogen_postgres
+      - autogen_neo4j
+      - vtuber-ollama
+    restart: unless-stopped
+
+  # SCB Gateway Service
+  scb_gateway:
+    build: /home/geo/directories/autonomy/docker-vtuber/app/CORE/autogen-agent/scb_gateway
+    container_name: scb_gateway
+    ports:
+      - "8300:8300"
+    environment:
+      - REDIS_URL=redis://redis_scb:6379/0
+      - LOG_LEVEL=INFO
+    networks:
+      - vtuber_network
+    depends_on:
+      - redis_scb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8300/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Kokoro TTS - Local Neural TTS Server
+  kokoro_tts:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+    container_name: kokoro_tts
+    ports:
+      - "8880:8880"
+    environment:
+      - KOKORO_HOST=0.0.0.0
+      - KOKORO_PORT=8880
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8880/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  # Ollama Model Loader - ensures models are loaded for AutoGen
+  ollama_loader:
+    image: curlimages/curl:latest
+    container_name: ollama_loader
+    depends_on:
+      - vtuber-ollama
+    networks:
+      - vtuber_network
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama to be ready...' &&
+        sleep 10 &&
+        echo 'Pulling llama3.1:8b model for AutoGen...' &&
+        curl -X POST http://vtuber-ollama:11434/api/pull -d '{\"name\": \"llama3.1:8b\"}' &&
+        echo 'Pulling nomic-embed-text model for embeddings...' &&
+        curl -X POST http://vtuber-ollama:11434/api/pull -d '{\"name\": \"nomic-embed-text:latest\"}' &&
+        echo 'Models pull initiated' &&
+        sleep 120 &&
+        echo 'Loading llama3.1:8b model into memory...' &&
+        curl -X POST http://vtuber-ollama:11434/api/generate -d '{\"model\": \"llama3.1:8b\", \"prompt\": \"Hello\", \"stream\": false}' &&
+        echo 'Model loaded successfully'
+      "
+    restart: "no"
+
+  # Orchestrator - Lightweight routing agent
+  vtuber_orchestrator:
+    build:
+      context: /home/geo/directories/autonomy/orchestrator
+      dockerfile: Dockerfile
+    container_name: vtuber_orchestrator
+    environment:
+      - OLLAMA_HOST=http://vtuber-ollama:11434
+      - API_REGISTRY_PATH=/config/api_registry.yaml
+      - LOG_LEVEL=INFO
+      - DECISION_TIMEOUT_MS=10
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - /home/geo/directories/autonomy/orchestrator/config:/config:ro
+      - /home/geo/directories/autonomy/logs/orchestrator:/logs
+    ports:
+      - "8082:8080"
+    networks:
+      - vtuber_network
+    depends_on:
+      - vtuber-ollama
+      - neurosync_s1
+      - autogen_agent
+      - redis_scb
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ===========================================
+  # INFRASTRUCTURE SERVICES
+  # ===========================================
+
+  # Ollama for local LLM
+  vtuber-ollama:
+    image: ollama/ollama:latest
+    container_name: vtuber-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # NGINX RTMP for streaming
+  nginx_rtmp:
+    build:
+      context: /home/geo/directories/autonomy/docker-vtuber/docker/files_docker_rtmp/docker/rtmp
+      no_cache: true
+    container_name: nginx_rtmp
+    ports:
+      - "1935:1935"
+      - "8080:8080"
+    volumes:
+      - /home/geo/directories/autonomy/docker-vtuber/docker/files_docker_rtmp/docker/rtmp/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+
+  # ===========================================
+  # DATA STORES
+  # ===========================================
+
+  # Redis - Shared Context Blackboard
+  redis_scb:
+    image: redis:7-alpine
+    container_name: redis_scb
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # PostgreSQL for AutoGen
+  autogen_postgres:
+    image: ankane/pgvector:latest
+    container_name: autogen_postgres
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=autonomous_agent
+    volumes:
+      - autonomous_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+    restart: unless-stopped
+    networks:
+      - vtuber_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Neo4j for semantic graph
+  autogen_neo4j:
+    image: neo4j:5-community
+    container_name: autogen_neo4j
+    environment:
+      - NEO4J_AUTH=neo4j/password123
+      - NEO4J_dbms_memory_pagecache_size=512M
+      - NEO4J_dbms_memory_heap_initial__size=512M
+      - NEO4J_dbms_memory_heap_max__size=1G
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      - NEO4J_dbms_connector_bolt_advertised__address=autogen_neo4j:7687
+      - NEO4J_dbms_connector_http_advertised__address=autogen_neo4j:7474
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    restart: unless-stopped
+    networks:
+      - vtuber_network
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # MONITORING STACK
+  # ===========================================
+
+  # Prometheus - Metrics Collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - /home/geo/directories/autonomy/monitoring/prometheus-all.yml:/etc/prometheus/prometheus.yml
+      - /home/geo/directories/autonomy/monitoring/alerts:/etc/prometheus/alerts
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+
+  # Grafana - Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3002:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=redis-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - /home/geo/directories/autonomy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # Node Exporter - System Metrics
+  node_exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+
+  # cAdvisor - Container Metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8090:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+
+  # Redis Exporter
+  redis_exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis_exporter
+    ports:
+      - "9121:9121"
+    environment:
+      - REDIS_ADDR=redis://redis_scb:6379
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+
+  # Postgres Exporter for AutoGen
+  postgres_exporter_autogen:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres_exporter_autogen
+    ports:
+      - "9187:9187"
+    environment:
+      - DATA_SOURCE_NAME=postgresql://postgres:postgres@autogen_postgres:5432/autonomous_agent?sslmode=disable
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+    depends_on:
+      - autogen_postgres
+
+  # Ollama Exporter
+  ollama_exporter:
+    build:
+      context: /home/geo/directories/autonomy/monitoring/exporters
+      dockerfile: Dockerfile.ollama
+      no_cache: true
+    container_name: ollama_exporter
+    ports:
+      - "9122:9122"
+    environment:
+      - OLLAMA_HOST=http://vtuber-ollama:11434
+      - EXPORTER_PORT=9122
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+    depends_on:
+      - vtuber-ollama
+
+  # NGINX Exporter
+  nginx_exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginx_exporter
+    ports:
+      - "9113:9113"
+    command:
+      - -nginx.scrape-uri=http://nginx_rtmp:8080/status
+    networks:
+      - vtuber_network
+    restart: unless-stopped
+    depends_on:
+      - nginx_rtmp
+
+volumes:
+  redis_data:
+  autonomous_postgres_data:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
+  ollama_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  vtuber_network:
+    driver: bridge
+    name: vtuber_network

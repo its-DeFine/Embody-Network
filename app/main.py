@@ -16,23 +16,19 @@ import uvicorn
 import logging
 import structlog
 
-from .api import auth, agents, teams, tasks, gpu, market, management, trading, master, audit, dex, ollama, security, cluster
+from .api import auth, agents, teams, tasks, gpu, management, master, audit, ollama, security, cluster
 from .api import dashboard_clean as dashboard
-from .api.v1 import oracle
 from .dependencies import get_redis, get_docker
 from .core.orchestration.orchestrator import orchestrator
 from .core.orchestration.gpu_orchestrator import gpu_orchestrator
-from .core.market.market_data import market_data_service
 from .core.agents.agent_manager import agent_manager
 from .core.agents.collective_intelligence import collective_intelligence
 from .infrastructure.messaging.websocket_manager import websocket_manager
-from .core.trading.trading_strategies import strategy_manager
 from .infrastructure.messaging.cross_instance_bridge import cross_instance_bridge
 from .infrastructure.monitoring.audit_logger import audit_logger
-# from .core.trading.dex_trading import dex_trading_engine  # Disabled due to web3 dependency
 from .services.ollama_integration import ollama_manager
 from .config import settings, IS_PRODUCTION, IS_DEVELOPMENT
-from .middleware import LoggingMiddleware, MetricsMiddleware, RateLimitMiddleware, SecurityHeadersMiddleware, TradingSecurityMiddleware
+from .middleware import LoggingMiddleware, MetricsMiddleware, RateLimitMiddleware, SecurityHeadersMiddleware
 from .errors import PlatformError, platform_exception_handler
 
 # Configure structured logging
@@ -88,13 +84,6 @@ async def lifespan(app: FastAPI):
     await gpu_orchestrator.initialize()
     await gpu_orchestrator.start_monitoring()
     
-    # Initialize market data service
-    await market_data_service.initialize()
-    
-    # Initialize Oracle Manager as the central oracle
-    from .core.oracle import oracle_manager
-    await oracle_manager.initialize()
-    logger.info("Oracle Manager initialized as central oracle")
     
     # Initialize agent manager with inter-agent communication
     await agent_manager.start()
@@ -113,8 +102,6 @@ async def lifespan(app: FastAPI):
     # Initialize WebSocket manager for real-time updates
     await websocket_manager.start()
     
-    # Initialize trading strategies manager
-    await strategy_manager.start()
     
     # Initialize audit logger
     await audit_logger.initialize()
@@ -158,13 +145,6 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Ollama not available: {e}")
         # Continue without Ollama - it's optional
     
-    # Initialize DEX trading engine
-    try:
-        await dex_trading_engine.initialize()
-        logger.info("DEX trading engine initialized")
-    except Exception as e:
-        logger.warning(f"DEX trading engine initialization failed: {e}")
-        # Continue without DEX - it's optional
     
     # Initialize cross-instance bridge if configured
     instance_id = os.environ.get("INSTANCE_ID")
@@ -176,13 +156,12 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(cross_instance_bridge.start_listening())
         logger.info("Cross-instance bridge initialized")
     
-    logger.info("🚀 Advanced 24/7 Trading Platform started successfully!")
+    logger.info("🚀 VTuber Autonomy Platform started successfully!")
     logger.info("📊 Access API docs at http://localhost:8000/docs")
-    logger.info("💰 Start trading at POST /api/v1/trading/start")
     yield
     
     # Shutdown in reverse order
-    logger.info("Shutting down 24/7 Trading Platform...")
+    logger.info("Shutting down VTuber Autonomy Platform...")
     
     # Stop distributed services if running
     try:
@@ -194,7 +173,6 @@ async def lifespan(app: FastAPI):
     except:
         pass  # Services might not have been started
     
-    await strategy_manager.stop()
     await websocket_manager.stop()
     await collective_intelligence.stop()
     await agent_manager.stop()
@@ -236,13 +214,9 @@ app.include_router(agents.router)
 app.include_router(teams.router)
 app.include_router(tasks.router)
 app.include_router(gpu.router)
-app.include_router(market.router)
-app.include_router(oracle.router)  # Oracle Manager API - central oracle for market data
 app.include_router(management.router)  # New management API
-app.include_router(trading.router)  # 24/7 Trading API
 app.include_router(master.router)  # Master management API
 app.include_router(audit.router)  # Audit logging API
-app.include_router(dex.router)  # DEX trading API
 app.include_router(ollama.router)  # Ollama LLM API
 app.include_router(security.router)  # Security API
 app.include_router(cluster.router)  # Cluster management API
@@ -318,45 +292,6 @@ async def authenticated_websocket(websocket: WebSocket):
         logger.error(f"Authenticated WebSocket error: {e}")
         await websocket_manager.disconnect_client(client_id)
 
-# Legacy market data WebSocket (for backward compatibility)
-@app.websocket("/ws/market")
-async def market_websocket(websocket: WebSocket):
-    """Legacy market data WebSocket for backward compatibility"""
-    await websocket.accept()
-    
-    try:
-        # Receive subscription request
-        data = await websocket.receive_json()
-        symbols = data.get("symbols", ["AAPL", "GOOGL", "MSFT"])
-        
-        logger.info(f"Starting legacy market data stream for {symbols}")
-        
-        # Define callback for price updates
-        async def send_price_update(symbol: str, price: float):
-            await websocket.send_json({
-                "type": "price_update",
-                "symbol": symbol,
-                "price": price,
-                "timestamp": datetime.utcnow().isoformat()
-            })
-        
-        # Start streaming prices
-        streaming_task = asyncio.create_task(
-            market_data_service.stream_prices(symbols, send_price_update)
-        )
-        
-        # Keep connection alive
-        while True:
-            # Wait for any message (heartbeat)
-            await websocket.receive_text()
-            
-    except WebSocketDisconnect:
-        logger.info("Legacy market WebSocket disconnected")
-        if 'streaming_task' in locals():
-            streaming_task.cancel()
-    except Exception as e:
-        logger.error(f"Legacy market WebSocket error: {e}")
-        await websocket.close()
 
 # API-only mode - no frontend
 # All control via Master Manager UI
