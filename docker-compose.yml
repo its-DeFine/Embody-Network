@@ -7,7 +7,7 @@ services:
   neurosync_s1:
     mem_limit: 12g
     build:
-      context: /home/geo/directories/autonomy/docker-vtuber
+      context: ./autonomy/docker-vtuber
       dockerfile: ./app/AVATAR/NeuroBridge/dockerfile
       no_cache: true
     container_name: neurosync_s1
@@ -46,7 +46,7 @@ services:
     networks:
       - vtuber_network
     volumes:
-      - /home/geo/directories/autonomy/docker-vtuber/app/AVATAR/NeuroBridge:/app/NeuroBridge
+      - ./autonomy/docker-vtuber/app/AVATAR/NeuroBridge:/app/NeuroBridge
     env_file:
       - .env
     depends_on:
@@ -61,7 +61,7 @@ services:
     container_name: autogen_agent
     command: sh -c "pip install 'neo4j>=5.0.0' 'fastembed>=0.4.0' && python -m autogen_agent.simplified_main"
     volumes:
-      - /home/geo/directories/autonomy/docker-vtuber/app/CORE/autogen-agent/autogen_agent:/app/autogen_agent
+      - ./autonomy/docker-vtuber/app/CORE/autogen-agent/autogen_agent:/app/autogen_agent
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@autogen_postgres:5432/autonomous_agent
       - USE_COGNITIVE_ENHANCEMENT=true
@@ -115,7 +115,7 @@ services:
 
   # SCB Gateway Service
   scb_gateway:
-    build: /home/geo/directories/autonomy/docker-vtuber/app/CORE/autogen-agent/scb_gateway
+    build: ./autonomy/docker-vtuber/app/CORE/autogen-agent/scb_gateway
     container_name: scb_gateway
     ports:
       - "8300:8300"
@@ -184,7 +184,7 @@ services:
   # Orchestrator - Lightweight routing agent
   vtuber_orchestrator:
     build:
-      context: /home/geo/directories/autonomy/orchestrator
+      context: ./autonomy/orchestrator
       dockerfile: Dockerfile
     container_name: vtuber_orchestrator
     environment:
@@ -194,8 +194,8 @@ services:
       - DECISION_TIMEOUT_MS=10
       - PYTHONUNBUFFERED=1
     volumes:
-      - /home/geo/directories/autonomy/orchestrator/config:/config:ro
-      - /home/geo/directories/autonomy/logs/orchestrator:/logs
+      - ./autonomy/orchestrator/config:/config:ro
+      - ./autonomy/logs/orchestrator:/logs
     ports:
       - "8082:8080"
     networks:
@@ -247,14 +247,14 @@ services:
   # NGINX RTMP for streaming
   nginx_rtmp:
     build:
-      context: /home/geo/directories/autonomy/docker-vtuber/docker/files_docker_rtmp/docker/rtmp
+      context: ./autonomy/docker-vtuber/docker/files_docker_rtmp/docker/rtmp
       no_cache: true
     container_name: nginx_rtmp
     ports:
       - "1935:1935"
       - "8080:8080"
     volumes:
-      - /home/geo/directories/autonomy/docker-vtuber/docker/files_docker_rtmp/docker/rtmp/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./autonomy/docker-vtuber/docker/files_docker_rtmp/docker/rtmp/nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
       - vtuber_network
     restart: unless-stopped
@@ -337,8 +337,8 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - /home/geo/directories/autonomy/monitoring/prometheus-all.yml:/etc/prometheus/prometheus.yml
-      - /home/geo/directories/autonomy/monitoring/alerts:/etc/prometheus/alerts
+      - ./autonomy/monitoring/prometheus-all.yml:/etc/prometheus/prometheus.yml
+      - ./autonomy/monitoring/alerts:/etc/prometheus/alerts
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -364,7 +364,7 @@ services:
       - GF_INSTALL_PLUGINS=redis-datasource
     volumes:
       - grafana_data:/var/lib/grafana
-      - /home/geo/directories/autonomy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./autonomy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
       - vtuber_network
     restart: unless-stopped
@@ -438,7 +438,7 @@ services:
   # Ollama Exporter
   ollama_exporter:
     build:
-      context: /home/geo/directories/autonomy/monitoring/exporters
+      context: ./autonomy/monitoring/exporters
       dockerfile: Dockerfile.ollama
       no_cache: true
     container_name: ollama_exporter
