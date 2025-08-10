@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "zen": {
+      "command": "/home/geo/operation/zen-mcp-wrapper.sh",
+      "args": [],
+      "env": {
+        "OPENAI_MODEL": "gpt-5",
+        "OPENAI_FALLBACK_MODEL": "gpt-4-turbo-preview"
+      },
+      "description": "Zen MCP Server - GPT-5 and Multi-model orchestration for Claude Code"
+    },
+    "puppeteer": {
+      "command": "puppeteer-mcp-server",
+      "args": [],
+      "env": {},
+      "description": "Puppeteer MCP Server - Browser automation for web QA testing"
+    }
+  }
+}

@@ -162,3 +162,22 @@ trading_dashboard.html
 *_PLAN.md
 *_ROADMAP.md
 *_SUMMARY.md
+.env.manager.local
+
+# API Keys and tokens
+*api_key*
+*API_KEY*
+*.zen-mcp.env
+*auth_token*
+/tmp/auth_token.txt
+
+# Test and debug files
+test_*.py
+debug_*.py
+*_test.html
+*_debug.html
+get_auth_token.py
+
+# Dashboard versions
+vtuber-dashboard.html
+vtuber-dashboard-v2.html

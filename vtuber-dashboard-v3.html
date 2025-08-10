@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎭 VTuber Agent Management System V3</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .tab-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+            background: transparent;
+            color: white;
+            font-size: 1rem;
+        }
+        
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .tab.active {
+            background: rgba(255, 255, 255, 0.2);
+            font-weight: bold;
+        }
+        
+        .tab-content {
+            padding: 30px;
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        .section-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 0.9rem;
+        }
+        
+        .stat-badge {
+            padding: 5px 12px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+        }
+        
+        .entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+        
+        .entity-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s;
+        }
+        
+        .entity-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .entity-card.active {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #10b981;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+        }
+        
+        .entity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .entity-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        
+        .entity-type {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .entity-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            margin-bottom: 10px;
+        }
+        
+        .status-online {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+        
+        .status-offline {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+        
+        .status-active {
+            background: rgba(34, 197, 94, 0.3);
+            color: #22c55e;
+            font-weight: bold;
+        }
+        
+        .entity-details {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+        
+        .entity-metadata {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        
+        .metadata-badge {
+            padding: 3px 8px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            font-size: 0.8rem;
+        }
+        
+        .entity-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            flex: 1;
+        }
+        
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #f56565 0%, #c53030 100%);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            opacity: 0.7;
+        }
+        
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        .command-interface {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .command-interface h3 {
+            margin-bottom: 15px;
+        }
+        
+        .command-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr 2fr auto;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .command-form select,
+        .command-form input {
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+        }
+        
+        .command-output {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-left: 4px solid;
+        }
+        
+        .alert-success {
+            border-color: #10b981;
+        }
+        
+        .alert-error {
+            border-color: #ef4444;
+        }
+        
+        .alert-info {
+            border-color: #3b82f6;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-indicator.online {
+            background: #10b981;
+        }
+        
+        .status-indicator.offline {
+            background: #ef4444;
+            animation: none;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .orchestrator-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border-radius: 15px;
+            font-size: 0.85rem;
+        }
+        
+        .infrastructure-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            background: rgba(168, 85, 247, 0.2);
+            color: #a855f7;
+            border-radius: 15px;
+            font-size: 0.85rem;
+        }
+        
+        .agent-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            background: rgba(251, 146, 60, 0.2);
+            color: #fb923c;
+            border-radius: 15px;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎭 VTuber Agent Management System V3</h1>
+            <p>Proper Entity Categorization: Orchestrators, Agents, and Infrastructure</p>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div class="tab-container">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('overview')">📊 System Overview</button>
+                <button class="tab" onclick="switchTab('orchestrators')">🎛️ Orchestrators</button>
+                <button class="tab" onclick="switchTab('agents')">🎭 Agents</button>
+                <button class="tab" onclick="switchTab('infrastructure')">🔧 Infrastructure</button>
+                <button class="tab" onclick="switchTab('commands')">🎮 Commands</button>
+            </div>
+
+            <!-- System Overview Tab -->
+            <div id="overview-tab" class="tab-content active">
+                <div class="section">
+                    <div class="section-header">
+                        <div class="section-title">🎛️ Orchestrators</div>
+                        <div class="section-stats">
+                            <div class="stat-badge">Total: <span id="orch-total">0</span></div>
+                            <div class="stat-badge">Active: <span id="orch-active">0</span></div>
+                        </div>
+                    </div>
+                    <div id="orchestrators-summary" class="entity-grid">
+                        <!-- Orchestrators will be loaded here -->
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <div class="section-title">🎭 Character Agents</div>
+                        <div class="section-stats">
+                            <div class="stat-badge">Total: <span id="agents-total">0</span></div>
+                            <div class="stat-badge">Active: <span id="agents-active">None</span></div>
+                        </div>
+                    </div>
+                    <div id="agents-summary" class="entity-grid">
+                        <!-- Agents will be loaded here -->
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <div class="section-title">🔧 Infrastructure Services</div>
+                        <div class="section-stats">
+                            <div class="stat-badge">Total: <span id="infra-total">0</span></div>
+                        </div>
+                    </div>
+                    <div id="infrastructure-summary" class="entity-grid">
+                        <!-- Infrastructure will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Orchestrators Tab -->
+            <div id="orchestrators-tab" class="tab-content">
+                <h2>Orchestrator Management</h2>
+                <p style="margin-bottom: 20px; opacity: 0.9;">Coordination systems that manage agent workflows</p>
+                <div id="orchestrators-detail" class="entity-grid">
+                    <!-- Detailed orchestrator view -->
+                </div>
+            </div>
+
+            <!-- Agents Tab -->
+            <div id="agents-tab" class="tab-content">
+                <h2>Character Agent Management</h2>
+                <p style="margin-bottom: 20px; opacity: 0.9;">Dynamic character entities with personalities - Only the displayed agent is active</p>
+                <div id="agents-detail" class="entity-grid">
+                    <!-- Detailed agents view -->
+                </div>
+            </div>
+
+            <!-- Infrastructure Tab -->
+            <div id="infrastructure-tab" class="tab-content">
+                <h2>Infrastructure Services</h2>
+                <p style="margin-bottom: 20px; opacity: 0.9;">Core service containers that power the VTuber system</p>
+                <div id="infrastructure-detail" class="entity-grid">
+                    <!-- Detailed infrastructure view -->
+                </div>
+            </div>
+
+            <!-- Commands Tab -->
+            <div id="commands-tab" class="tab-content">
+                <div class="command-interface">
+                    <h3>🎮 Agent Command Interface</h3>
+                    <div class="command-form">
+                        <select id="target-select">
+                            <option value="">Select Target...</option>
+                        </select>
+                        <select id="command-type">
+                            <option value="speak">Speak</option>
+                            <option value="activate">Activate</option>
+                            <option value="gesture">Gesture</option>
+                            <option value="emotion">Emotion</option>
+                        </select>
+                        <input type="text" id="command-input" placeholder="Enter command parameters...">
+                        <button class="btn btn-primary" onclick="sendCommand()">Send</button>
+                    </div>
+                    <div class="command-output" id="command-output">
+                        Ready for commands...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = localStorage.getItem('vtuber_auth_token');
+        const MANAGER_URL = 'http://localhost:8010';
+        let categorizedData = null;
+        
+        // Initialize
+        window.addEventListener('load', () => {
+            if (!authToken) {
+                authenticate();
+            } else {
+                loadCategorizedData();
+            }
+        });
+        
+        async function authenticate() {
+            const password = prompt('Enter admin password:');
+            try {
+                const response = await fetch(`${MANAGER_URL}/api/v1/auth/token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `username=admin@system.com&password=${password}`
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.access_token;
+                    localStorage.setItem('vtuber_auth_token', authToken);
+                    showAlert('✅ Authenticated successfully', 'success');
+                    loadCategorizedData();
+                } else {
+                    showAlert('❌ Authentication failed', 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Connection error: ' + error.message, 'error');
+            }
+        }
+        
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            
+            if (tabName === 'overview') {
+                loadCategorizedData();
+            }
+        }
+        
+        async function loadCategorizedData() {
+            if (!authToken) return;
+            
+            try {
+                const response = await fetch(`${MANAGER_URL}/api/v1/embodiment/agents/categorized`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (response.ok) {
+                    categorizedData = await response.json();
+                    updateOverview();
+                    updateDetailedViews();
+                    updateCommandTargets();
+                } else {
+                    showAlert('Failed to load categorized data', 'error');
+                }
+            } catch (error) {
+                showAlert('Error loading data: ' + error.message, 'error');
+            }
+        }
+        
+        function updateOverview() {
+            if (!categorizedData) return;
+            
+            // Update statistics
+            document.getElementById('orch-total').textContent = categorizedData.orchestrators.total;
+            document.getElementById('orch-active').textContent = categorizedData.orchestrators.active;
+            document.getElementById('agents-total').textContent = categorizedData.agents.total;
+            document.getElementById('agents-active').textContent = categorizedData.agents.active || 'None';
+            document.getElementById('infra-total').textContent = categorizedData.infrastructure.total;
+            
+            // Render orchestrators summary
+            const orchContainer = document.getElementById('orchestrators-summary');
+            if (categorizedData.orchestrators.list.length === 0) {
+                orchContainer.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎛️</div><p>No orchestrators registered</p></div>';
+            } else {
+                orchContainer.innerHTML = categorizedData.orchestrators.list.map(orch => 
+                    renderOrchestratorCard(orch, true)
+                ).join('');
+            }
+            
+            // Render agents summary
+            const agentsContainer = document.getElementById('agents-summary');
+            if (categorizedData.agents.list.length === 0) {
+                agentsContainer.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎭</div><p>No character agents deployed</p></div>';
+            } else {
+                agentsContainer.innerHTML = categorizedData.agents.list.map(agent => 
+                    renderAgentCard(agent, true)
+                ).join('');
+            }
+            
+            // Render infrastructure summary
+            const infraContainer = document.getElementById('infrastructure-summary');
+            if (categorizedData.infrastructure.list.length === 0) {
+                infraContainer.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔧</div><p>No infrastructure services running</p></div>';
+            } else {
+                infraContainer.innerHTML = categorizedData.infrastructure.list.map(infra => 
+                    renderInfrastructureCard(infra, true)
+                ).join('');
+            }
+        }
+        
+        function updateDetailedViews() {
+            if (!categorizedData) return;
+            
+            // Update detailed orchestrators view
+            document.getElementById('orchestrators-detail').innerHTML = 
+                categorizedData.orchestrators.list.map(orch => renderOrchestratorCard(orch, false)).join('');
+            
+            // Update detailed agents view
+            document.getElementById('agents-detail').innerHTML = 
+                categorizedData.agents.list.map(agent => renderAgentCard(agent, false)).join('');
+            
+            // Update detailed infrastructure view
+            document.getElementById('infrastructure-detail').innerHTML = 
+                categorizedData.infrastructure.list.map(infra => renderInfrastructureCard(infra, false)).join('');
+        }
+        
+        function renderOrchestratorCard(orch, summary = true) {
+            const isActive = orch.is_active || false;
+            const manages = orch.metadata?.manages || [];
+            
+            return `
+                <div class="entity-card ${isActive ? 'active' : ''}">
+                    <div class="entity-header">
+                        <div class="entity-name">${orch.name}</div>
+                        <div class="orchestrator-indicator">
+                            <span class="status-indicator ${isActive ? 'online' : 'offline'}"></span>
+                            Orchestrator
+                        </div>
+                    </div>
+                    <div class="entity-status ${isActive ? 'status-active' : 'status-offline'}">
+                        ${isActive ? '✅ ACTIVE' : '⭕ REGISTERED'}
+                    </div>
+                    <div class="entity-details">
+                        <p>ID: ${orch.agent_id}</p>
+                        <p>Endpoint: ${orch.endpoint || 'N/A'}</p>
+                        ${manages.length > 0 ? `<p>Manages: ${manages.join(', ')}</p>` : ''}
+                    </div>
+                    ${!summary ? `
+                        <div class="entity-actions">
+                            <button class="btn ${isActive ? '' : 'btn-success'}" onclick="activateOrchestrator('${orch.agent_id}')">
+                                ${isActive ? 'Refresh' : 'Activate'}
+                            </button>
+                            <button class="btn" onclick="configureOrchestrator('${orch.agent_id}')">Configure</button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        
+        function renderAgentCard(agent, summary = true) {
+            const isActive = agent.is_active || false;
+            const metadata = agent.metadata || {};
+            const config = metadata.configuration || metadata.character_template || {};
+            
+            return `
+                <div class="entity-card ${isActive ? 'active' : ''}">
+                    <div class="entity-header">
+                        <div class="entity-name">${agent.name}</div>
+                        <div class="agent-indicator">
+                            🎭 Character
+                        </div>
+                    </div>
+                    ${isActive ? '<div class="entity-status status-active">🎭 CURRENTLY ACTIVE (DISPLAYED)</div>' : ''}
+                    <div class="entity-details">
+                        <p>ID: ${agent.agent_id}</p>
+                        ${config.role ? `<p>Role: ${config.role}</p>` : ''}
+                    </div>
+                    ${config.personality_traits ? `
+                        <div class="entity-metadata">
+                            ${config.personality_traits.map(trait => 
+                                `<span class="metadata-badge">${trait}</span>`
+                            ).join('')}
+                        </div>
+                    ` : ''}
+                    ${!summary ? `
+                        <div class="entity-actions">
+                            <button class="btn btn-success" onclick="activateAgent('${agent.agent_id}')" ${isActive ? 'disabled' : ''}>
+                                ${isActive ? 'Active' : 'Display Agent'}
+                            </button>
+                            <button class="btn" onclick="sendAgentCommand('${agent.agent_id}', 'speak')">Speak</button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        
+        function renderInfrastructureCard(infra, summary = true) {
+            const metadata = infra.metadata || {};
+            const type = metadata.type || 'service';
+            
+            return `
+                <div class="entity-card">
+                    <div class="entity-header">
+                        <div class="entity-name">${infra.name}</div>
+                        <div class="infrastructure-indicator">
+                            ⚙️ ${type}
+                        </div>
+                    </div>
+                    <div class="entity-status ${infra.status === 'online' ? 'status-online' : 'status-offline'}">
+                        <span class="status-indicator ${infra.status === 'online' ? 'online' : 'offline'}"></span>
+                        ${infra.status || 'unknown'}
+                    </div>
+                    <div class="entity-details">
+                        <p>ID: ${infra.agent_id}</p>
+                        <p>Endpoint: ${infra.endpoint || 'N/A'}</p>
+                    </div>
+                    ${infra.capabilities ? `
+                        <div class="entity-metadata">
+                            ${infra.capabilities.slice(0, 3).map(cap => 
+                                `<span class="metadata-badge">${cap}</span>`
+                            ).join('')}
+                        </div>
+                    ` : ''}
+                    ${!summary ? `
+                        <div class="entity-actions">
+                            <button class="btn" onclick="checkServiceHealth('${infra.agent_id}')">Check Health</button>
+                            <button class="btn" onclick="viewServiceLogs('${infra.agent_id}')">View Logs</button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        
+        function updateCommandTargets() {
+            if (!categorizedData) return;
+            
+            const selector = document.getElementById('target-select');
+            selector.innerHTML = '<option value="">Select Target...</option>';
+            
+            // Add agents
+            if (categorizedData.agents.list.length > 0) {
+                selector.innerHTML += '<optgroup label="Character Agents">';
+                categorizedData.agents.list.forEach(agent => {
+                    selector.innerHTML += `<option value="${agent.agent_id}">${agent.name} ${agent.is_active ? '(Active)' : ''}</option>`;
+                });
+                selector.innerHTML += '</optgroup>';
+            }
+            
+            // Add orchestrators
+            if (categorizedData.orchestrators.list.length > 0) {
+                selector.innerHTML += '<optgroup label="Orchestrators">';
+                categorizedData.orchestrators.list.forEach(orch => {
+                    selector.innerHTML += `<option value="${orch.agent_id}">${orch.name}</option>`;
+                });
+                selector.innerHTML += '</optgroup>';
+            }
+        }
+        
+        async function activateAgent(agentId) {
+            showAlert(`Activating agent ${agentId}...`, 'info');
+            
+            try {
+                // Send activation command to NeuroSync
+                const response = await fetch('http://localhost:5001/character/activate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ character_id: agentId })
+                });
+                
+                if (response.ok) {
+                    showAlert(`✅ Agent ${agentId} is now active and displayed`, 'success');
+                    setTimeout(loadCategorizedData, 1000);
+                } else {
+                    showAlert(`Failed to activate agent: ${response.statusText}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function sendCommand() {
+            const targetId = document.getElementById('target-select').value;
+            const commandType = document.getElementById('command-type').value;
+            const commandInput = document.getElementById('command-input').value;
+            
+            if (!targetId) {
+                showAlert('Please select a target', 'error');
+                return;
+            }
+            
+            const command = {
+                action: commandType,
+                payload: commandType === 'speak' ? 
+                    { text: commandInput } : 
+                    { command: commandInput },
+                priority: 1,
+                timeout_ms: 10000
+            };
+            
+            try {
+                const response = await fetch(
+                    `${MANAGER_URL}/api/v1/embodiment/agents/${targetId}/commands`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(command)
+                    }
+                );
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const output = document.getElementById('command-output');
+                    output.textContent = `✅ Command sent to ${targetId}\nAction: ${commandType}\nCorrelation ID: ${result.correlation_id || 'N/A'}\nTimestamp: ${new Date().toLocaleTimeString()}`;
+                } else {
+                    document.getElementById('command-output').textContent = 
+                        `❌ Failed: ${response.statusText}`;
+                }
+            } catch (error) {
+                document.getElementById('command-output').textContent = 
+                    `❌ Error: ${error.message}`;
+            }
+        }
+        
+        function activateOrchestrator(orchId) {
+            showAlert(`Activating orchestrator ${orchId}...`, 'info');
+            // Implementation would go here
+        }
+        
+        function configureOrchestrator(orchId) {
+            showAlert(`Configuration for ${orchId} would open here`, 'info');
+        }
+        
+        function sendAgentCommand(agentId, action) {
+            document.getElementById('target-select').value = agentId;
+            document.getElementById('command-type').value = action;
+            switchTab('commands');
+        }
+        
+        function checkServiceHealth(serviceId) {
+            showAlert(`Checking health of ${serviceId}...`, 'info');
+        }
+        
+        function viewServiceLogs(serviceId) {
+            showAlert(`Logs for ${serviceId} would open here`, 'info');
+        }
+        
+        function showAlert(message, type = 'info') {
+            const container = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            container.appendChild(alert);
+            
+            setTimeout(() => alert.remove(), 5000);
+        }
+        
+        // Auto-refresh every 10 seconds
+        setInterval(() => {
+            if (document.getElementById('overview-tab').classList.contains('active')) {
+                loadCategorizedData();
+            }
+        }, 10000);
+    </script>
+</body>
+</html>

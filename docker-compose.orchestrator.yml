@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  orchestrator-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: orchestrator-cluster-local
+    environment:
+      - AGENT_ID=orchestrator-1-agent
+      - AGENT_TYPE=orchestrator_cluster
+      - AGENT_PORT=8001
+      - REDIS_URL=redis://host.docker.internal:6379
+      - CENTRAL_MANAGER_URL=http://host.docker.internal:8010
+      - ADMIN_PASSWORD=debug-admin-password-very-strong-123
+      - CONTAINER_NAME=orchestrator-1-cluster
+      - EXTERNAL_IP=127.0.0.1
+      - AGENT_CONFIG={"capabilities":["agent_runner","orchestrator_cluster"],"max_agents":10,"orchestrator_id":1}
+      - AUTO_REGISTER=true
+      - HEARTBEAT_INTERVAL=30
+    ports:
+      - "8001:8001"
+    networks: [orchestrator-network]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  orchestrator-network:
+    driver: bridge
+
+
+

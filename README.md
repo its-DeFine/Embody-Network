@@ -1,183 +1,85 @@
-# 24/7 Autonomous Trading System
+# VTuber Autonomy Platform
+*Enhanced Embodied Multi-Agent System*
 
-**GPU-accelerated autonomous trading platform with AI-driven strategies, unlimited market data, and distributed orchestrator deployment capabilities.**
+## Overview
+A comprehensive platform for managing virtual embodied agents (VTubers) with advanced AI capabilities, real-time streaming, and dynamic character management.
 
-![System Status](https://img.shields.io/badge/Status-Production%20Ready-green)
-![GPU](https://img.shields.io/badge/GPU-Accelerated-blue)
-![Trading](https://img.shields.io/badge/Trading-24/7%20Autonomous-orange)
-![AI](https://img.shields.io/badge/AI-Ollama%20Integrated-purple)
-
-## 🚀 Quick Deploy
-
-### Orchestrator Node (Recommended)
-Deploy a distributed orchestrator node that connects to existing central manager infrastructure:
-
-```bash
-# 1. Configure connection to central manager
-cp .env.orchestrator .env
-# Edit .env: Set CENTRAL_MANAGER_HOST, ADMIN_PASSWORD, JWT_SECRET
-
-# 2. Deploy orchestrator with GPU + AI support
-cd docker/production/
-docker-compose -f docker-compose.orchestrator-cluster.yml up -d
-```
-
-### Central Manager (Full Stack)
-Deploy complete trading infrastructure:
-
-```bash
-# 1. Configure environment
-cp .env.central-manager .env
-# Edit .env with your API keys and settings
-
-# 2. Deploy central manager
-cd docker/production
-docker-compose -f docker-compose.central-manager.yml up -d
-
-# 3. Start trading
-curl -X POST "http://localhost:8000/api/v1/trading/start" \
-  -H "Content-Type: application/json" \
-  -d '{"initial_capital": 10000.0}'
-```
-
-## 📋 System Overview
-
-This repository contains a production-ready 24/7 autonomous trading system featuring:
-
-### 🔥 **Core Features**
-- **GPU-Accelerated AI**: Nvidia runtime with Ollama for local LLM inference
-- **Rate-Limit-Free Data**: Mock market data provider for unlimited testing
-- **High-Frequency Strategies**: DCA (2-minute intervals) + Arbitrage (80% trigger rate)
-- **Distributed Architecture**: Central manager + multiple orchestrator nodes
-- **Real-Time Execution**: Sub-second trade execution with continuous monitoring
-
-### 🎯 **Trading Capabilities**
-- **Multiple Strategies**: Arbitrage, DCA, Momentum, Mean Reversion, Scalping
-- **Risk Management**: Stop losses, position limits, daily trade limits
-- **Multi-Asset Support**: Stocks, crypto, ETFs with configurable symbols
-- **Performance Tracking**: Real-time P&L, portfolio metrics, trade statistics
-
-### 🏗️ **Architecture**
-- **Central Manager**: Core trading engine with database and Redis
-- **Orchestrator Nodes**: Distributed AI agents with GPU acceleration
-- **Market Data**: Multiple providers with automatic failover
-- **Security**: JWT authentication, role-based access, input validation
-
-## 🔧 Full Orchestrator Deployment
+## Quick Start
 
 ### Prerequisites
-- Docker with nvidia runtime support
-- GPU-enabled host (for AI acceleration)
-- Network access to central manager
+- Docker & Docker Compose
+- Python 3.11+
+- Redis 6.0+
+- 8GB RAM minimum
 
-### Configuration Steps
-
-1. **Copy orchestrator environment file:**
-   ```bash
-   cp .env.orchestrator .env
-   ```
-
-2. **Configure connection settings in `.env`:**
-   ```env
-   # Central Manager Connection
-   CENTRAL_MANAGER_HOST=<central-manager-ip>
-   CENTRAL_MANAGER_URL=http://<central-manager-ip>:8000
-   REDIS_URL=redis://:<password>@<central-manager-ip>:6379
-   
-   # Authentication (must match central manager)
-   ADMIN_PASSWORD=<central-manager-admin-password>
-   JWT_SECRET=<central-manager-jwt-secret>
-   
-   # Orchestrator Identity
-   ORCHESTRATOR_ID=<unique-id>
-   EXTERNAL_IP=<your-external-ip>
-   
-   # GPU Configuration
-   ENABLE_GPU_SUPPORT=true
-   OLLAMA_BASE_URL=http://orchestrator-ollama-1:11434
-   ```
-
-3. **Deploy orchestrator:**
-   ```bash
-   cd docker/production
-   docker-compose --env-file ../../.env.orchestrator -f docker-compose.orchestrator-cluster.yml up -d
-   ```
-
-4. **Verify deployment:**
-   ```bash
-   docker ps  # Check containers are running
-   docker logs orchestrator-cluster-1  # Check connection to central manager
-   ```
-
-### Orchestrator Components
-- **orchestrator-cluster-1**: Main trading agent with GPU access
-- **orchestrator-ollama-1**: Local LLM service for AI-driven decisions
-- **Automatic registration**: Connects to central manager on startup
-
-## 📊 API Reference
-
-### Trading Control
+### Installation
 ```bash
-# Start trading
-POST /api/v1/trading/start
-{"initial_capital": 10000.0}
+# Clone the repository
+git clone <repository-url>
+cd operation
 
-# System status
-GET /api/v1/trading/status
+# Copy environment configuration
+cp .env.example .env
+# Edit .env with your configuration
 
-# Portfolio & positions
-GET /api/v1/trading/portfolio
+# Start Redis
+redis-server
 
-# Stop trading
-POST /api/v1/trading/stop
+# Launch Central Manager
+docker-compose -f docker-compose.manager.debug.yml up -d
+
+# Launch VTuber Services
+cd autonomy
+docker-compose -f docker-compose.yml up -d
+
+# Access Dashboard
+python3 -m http.server 8081
+# Open http://localhost:8081/vtuber-dashboard-v3.html
 ```
 
-### Health & Monitoring
-```bash
-# System health
-GET /health
+## Architecture
 
-# Trade history
-GET /api/v1/trading/trades
+### System Components
+- **Central Manager**: Authentication, agent registry, command routing
+- **NeuroSync S1**: Avatar control and speech synthesis
+- **AutoGen Multi-Agent**: Cognitive processing and decision making
+- **SCB Gateway**: Message routing and event handling
+- **RTMP Streaming**: Audio/video streaming server
 
-# Performance metrics
-GET /api/v1/trading/performance
-```
+### Agent Types
+1. **Orchestrators**: Workflow coordination systems
+2. **Character Agents**: AI personalities (Luna, Diana, Sophia)
+3. **Infrastructure**: Core service containers
 
-## 🛡️ Security & Risk Management
+## Features
+- ✅ Dynamic agent creation and management
+- ✅ Real-time character switching
+- ✅ Text-to-speech with streaming output
+- ✅ Web-based management dashboard
+- ✅ JWT-based authentication
+- ✅ Redis-backed state management
+- ✅ Docker containerization
+- ✅ RTMP/HLS streaming support
 
-### Built-in Safety Features
-- **Position Limits**: Max 10% portfolio per position
-- **Stop Losses**: Automatic 2% stop loss on all trades
-- **Daily Limits**: Maximum 50 trades per day
-- **Real-time Monitoring**: Continuous risk assessment
-- **Emergency Stop**: Instant halt via API
+## Documentation
+- [Production Setup Guide](docs/PRODUCTION_SETUP.md)
+- [Architecture Overview](docs/ARCHITECTURE.md)
+- [API Documentation](docs/API.md)
 
-### Security Features
-- **JWT Authentication**: Secure API access
-- **Role-based Access**: Admin/Trader/Viewer permissions
-- **Input Validation**: Protection against malicious requests
-- **Rate Limiting**: API abuse prevention
+## Key Files
+- `agent_manager_v2.py` - Advanced agent management with categorization
+- `vtuber-dashboard-v3.html` - Web management interface
+- `app/api/embodiment.py` - Core API endpoints
+- `docker-compose.yml` - Service orchestration
 
-## 📚 Documentation
+## Security Notes
+- Never commit `.env` files with real credentials
+- Use strong passwords (32+ characters)
+- Rotate JWT secrets regularly
+- Configure firewall rules for production
 
-For detailed documentation, see:
-- **[ORCHESTRATOR_DEPLOYMENT_PATTERN.md](docs/ORCHESTRATOR_DEPLOYMENT_PATTERN.md)** - Complete orchestrator deployment guide
-- **[DISTRIBUTED_QUICK_START.md](docs/DISTRIBUTED_QUICK_START.md)** - Quick start for distributed deployment
-- **[SECURITY.md](docs/SECURITY.md)** - Security configuration and best practices
-- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+## License
+Proprietary - All rights reserved
 
-## ⚠️ Important Disclaimers
-
-- **Real Money Trading**: This system executes real trades with actual capital
-- **GPU Requirements**: Orchestrator nodes require nvidia-docker for AI acceleration
-- **Market Risk**: All trading involves substantial risk of loss
-- **Testing Recommended**: Start with small amounts to validate system behavior
-
-## 📜 License
-
-MIT License - Use at your own risk. This software is for educational purposes. Trading involves substantial risk of loss and past performance does not guarantee future results.
-
----
-
-**Ready to deploy?** Start with an orchestrator node deployment using the quick deploy commands above.
+## Support
+For issues or questions, please refer to the documentation or contact the development team.

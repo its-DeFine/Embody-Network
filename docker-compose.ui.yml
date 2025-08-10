@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  manager-ui:
+    image: nginx:alpine
+    container_name: manager-ui-8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/ui/default.conf:/etc/nginx/conf.d/default.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+

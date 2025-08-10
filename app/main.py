@@ -16,17 +16,29 @@ import uvicorn
 import logging
 import structlog
 
-from .api import auth, agents, teams, tasks, gpu, management, master, audit, ollama, security, cluster, vtuber
-from .api import dashboard_clean as dashboard
+EMBODIMENT_ONLY_ENV = os.environ.get("EMBODIMENT_ONLY", "").lower() == "true"
+if EMBODIMENT_ONLY_ENV:
+    from .api import auth
+    from .api import embodiment
+    from .api import dashboard_clean as dashboard
+    # Set None for unused modules in embodiment-only mode
+    agents = teams = tasks = gpu = management = master = audit = ollama = security = cluster = vtuber = None
+    orchestrator = gpu_orchestrator = agent_manager = collective_intelligence = None
+    websocket_manager = cross_instance_bridge = audit_logger = ollama_manager = None
+else:
+    from .api import auth, agents, teams, tasks, gpu, management, master, audit, ollama, security, cluster, vtuber
+    from .api import embodiment
+    from .api import dashboard_clean as dashboard
+    from .core.orchestration.orchestrator import orchestrator
+    from .core.orchestration.gpu_orchestrator import gpu_orchestrator
+    from .core.agents.agent_manager import agent_manager
+    from .core.agents.collective_intelligence import collective_intelligence
+    from .infrastructure.messaging.websocket_manager import websocket_manager
+    from .infrastructure.messaging.cross_instance_bridge import cross_instance_bridge
+    from .infrastructure.monitoring.audit_logger import audit_logger
+    from .services.ollama_integration import ollama_manager
+
 from .dependencies import get_redis, get_docker
-from .core.orchestration.orchestrator import orchestrator
-from .core.orchestration.gpu_orchestrator import gpu_orchestrator
-from .core.agents.agent_manager import agent_manager
-from .core.agents.collective_intelligence import collective_intelligence
-from .infrastructure.messaging.websocket_manager import websocket_manager
-from .infrastructure.messaging.cross_instance_bridge import cross_instance_bridge
-from .infrastructure.monitoring.audit_logger import audit_logger
-from .services.ollama_integration import ollama_manager
 from .config import settings, IS_PRODUCTION, IS_DEVELOPMENT
 from .middleware import LoggingMiddleware, MetricsMiddleware, RateLimitMiddleware, SecurityHeadersMiddleware
 from .errors import PlatformError, platform_exception_handler
@@ -77,39 +89,48 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Docker not available: {e}")
         docker = None
     
-    # Start orchestrator (enhanced with 24/7 capabilities)
-    await orchestrator.start()
+    if not EMBODIMENT_ONLY_ENV:
+        # Start orchestrator (enhanced with 24/7 capabilities)
+        await orchestrator.start()
+        
+        # Initialize GPU orchestrator
+        await gpu_orchestrator.initialize()
+        await gpu_orchestrator.start_monitoring()
+        
+        
+        # Initialize agent manager with inter-agent communication
+        await agent_manager.start()
+        
+        # Initialize collective intelligence system - FIXED: Don't block on startup
+        # Create a task to start it in the background
+        async def start_collective_intelligence():
+            try:
+                logger.info("Starting collective intelligence in background...")
+                await collective_intelligence.start()
+            except Exception as e:
+                logger.warning(f"Collective intelligence startup issue (non-fatal): {e}")
+        
+        asyncio.create_task(start_collective_intelligence())
+        
+        # Initialize WebSocket manager for real-time updates
+        await websocket_manager.start()
+        
+        
+        # Initialize audit logger
+        await audit_logger.initialize()
+    else:
+        logger.info("Running in EMBODIMENT_ONLY mode - skipping agent/orchestrator initialization")
     
-    # Initialize GPU orchestrator
-    await gpu_orchestrator.initialize()
-    await gpu_orchestrator.start_monitoring()
-    
-    
-    # Initialize agent manager with inter-agent communication
-    await agent_manager.start()
-    
-    # Initialize collective intelligence system - FIXED: Don't block on startup
-    # Create a task to start it in the background
-    async def start_collective_intelligence():
+    # Initialize security manager (optional in debug)
+    if os.environ.get("SKIP_PGP_INIT", "").lower() == "true":
+        logger.warning("Skipping PGP initialization (SKIP_PGP_INIT=true)")
+    else:
         try:
-            logger.info("Starting collective intelligence in background...")
-            await collective_intelligence.start()
+            from .infrastructure.security.key_manager import secure_key_manager
+            await secure_key_manager.initialize()
+            logger.info("Security manager initialized with PGP support")
         except Exception as e:
-            logger.warning(f"Collective intelligence startup issue (non-fatal): {e}")
-    
-    asyncio.create_task(start_collective_intelligence())
-    
-    # Initialize WebSocket manager for real-time updates
-    await websocket_manager.start()
-    
-    
-    # Initialize audit logger
-    await audit_logger.initialize()
-    
-    # Initialize security manager
-    from .infrastructure.security.key_manager import secure_key_manager
-    await secure_key_manager.initialize()
-    logger.info("Security manager initialized with PGP support")
+            logger.warning(f"Security manager initialization skipped due to error: {e}")
     
     # Initialize distributed container services
     from .core.orchestration.container_discovery import container_discovery_service
@@ -173,11 +194,12 @@ async def lifespan(app: FastAPI):
     except:
         pass  # Services might not have been started
     
-    await websocket_manager.stop()
-    await collective_intelligence.stop()
-    await agent_manager.stop()
-    await gpu_orchestrator.stop_monitoring()
-    await orchestrator.stop()
+    if not EMBODIMENT_ONLY_ENV:
+        await websocket_manager.stop()
+        await collective_intelligence.stop()
+        await agent_manager.stop()
+        await gpu_orchestrator.stop_monitoring()
+        await orchestrator.stop()
     await redis.close()
     if docker:
         docker.close()
@@ -207,20 +229,26 @@ app.add_middleware(
 # Add exception handlers
 app.add_exception_handler(PlatformError, platform_exception_handler)
 
-# Include routers
-app.include_router(auth.router)
-app.include_router(agents.router)
-app.include_router(teams.router)
-app.include_router(tasks.router)
-app.include_router(gpu.router)
-app.include_router(management.router)  # New management API
-app.include_router(master.router)  # Master management API
-app.include_router(audit.router)  # Audit logging API
-app.include_router(ollama.router)  # Ollama LLM API
-app.include_router(security.router)  # Security API
-app.include_router(cluster.router)  # Cluster management API
-app.include_router(vtuber.router)  # VTuber control API
-app.include_router(dashboard.router)  # Built-in Dashboard
+# Include routers (allow minimal boot for embodiment-only QA)
+if EMBODIMENT_ONLY_ENV:
+    app.include_router(auth.router)
+    app.include_router(embodiment.router)
+    app.include_router(dashboard.router)
+else:
+    app.include_router(auth.router)
+    app.include_router(agents.router)
+    app.include_router(teams.router)
+    app.include_router(tasks.router)
+    app.include_router(gpu.router)
+    app.include_router(management.router)  # New management API
+    app.include_router(master.router)  # Master management API
+    app.include_router(audit.router)  # Audit logging API
+    app.include_router(ollama.router)  # Ollama LLM API
+    app.include_router(security.router)  # Security API
+    app.include_router(cluster.router)  # Cluster management API
+    app.include_router(vtuber.router)  # VTuber control API
+    app.include_router(embodiment.router)  # Embodied agent orchestration API
+    app.include_router(dashboard.router)  # Built-in Dashboard
 
 # Health check
 @app.get("/health")
