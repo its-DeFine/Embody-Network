@@ -1,6 +1,6 @@
 # API Reference
 
-**Complete API documentation for the 24/7 Autonomous Trading System.**
+**Complete API documentation for the VTuber Autonomy Platform.**
 
 ## 🔐 Authentication
 
@@ -32,7 +32,68 @@ Include the token in all subsequent requests:
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 ```
 
-## 💹 Trading API
+## 🆕 System Information
+
+### Get Version
+```http
+GET /api/v1/version
+```
+
+**Response:**
+```json
+{
+  "version": "0.1.0",
+  "major": 0,
+  "minor": 1,
+  "patch": 0,
+  "prerelease": null,
+  "build": null
+}
+```
+
+### Health Check
+```http
+GET /health
+```
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-08-11T10:30:00Z",
+  "version": "0.1.0"
+}
+```
+
+## 🎭 VTuber Agent Management
+
+### List Agents
+```http
+GET /api/v1/embodiment/agents
+Authorization: Bearer <token>
+```
+
+**Response:**
+```json
+[
+  {
+    "agent_id": "luna_001",
+    "name": "Luna",
+    "status": "online",
+    "type": "character",
+    "created_at": "2025-08-11T10:00:00Z"
+  }
+]
+```
+
+### Dashboard
+```http
+GET /dashboard/
+```
+
+Returns the VTuber management dashboard HTML with real-time agent monitoring.
+
+## 💹 Trading API (Legacy)
 
 ### Start Trading System
 ```http

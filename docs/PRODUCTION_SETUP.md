@@ -43,10 +43,13 @@ redis-cli ping
 ### 1. Central Manager
 ```bash
 # Build and start the manager
-docker-compose -f docker-compose.manager.debug.yml up -d
+docker-compose -f docker-compose.manager.yml up -d
 
 # Verify it's running
 curl http://localhost:8010/health
+
+# Check version
+curl http://localhost:8010/api/v1/version
 ```
 
 ### 2. VTuber Autonomy System

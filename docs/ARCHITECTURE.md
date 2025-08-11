@@ -1,10 +1,10 @@
 # System Architecture
 
-**Complete architecture overview of the 24/7 Autonomous Trading System.**
+**Complete architecture overview of the VTuber Autonomy Platform.**
 
 ## 🏗️ System Overview
 
-The trading system is built as a **production-ready monolith** with microservices-inspired internal architecture. It combines real-time market data processing, AI-driven decision making, and autonomous trade execution in a single, highly-available application.
+The VTuber Autonomy Platform (v0.1.0) is built as a **production-ready system** with microservices architecture. It combines real-time agent management, AI-driven character control, streaming capabilities, and autonomous decision making in a distributed, highly-available platform.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐

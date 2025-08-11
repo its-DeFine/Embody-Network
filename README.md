@@ -1,6 +1,9 @@
 # VTuber Autonomy Platform
 *Enhanced Embodied Multi-Agent System*
 
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/its-DeFine/agent-net/releases)
+[![License](https://img.shields.io/badge/license-Proprietary-red)](LICENSE)
+
 ## Overview
 A comprehensive platform for managing virtual embodied agents (VTubers) with advanced AI capabilities, real-time streaming, and dynamic character management.
 
@@ -86,11 +89,14 @@ operation/
 - ✅ Redis-backed state management
 - ✅ Docker containerization
 - ✅ RTMP/HLS streaming support
+- ✅ Automatic semantic versioning with CI/CD
+- ✅ Version tracking and release automation
 
 ## Documentation
 - [Production Setup Guide](docs/PRODUCTION_SETUP.md)
 - [Architecture Overview](docs/ARCHITECTURE.md)
-- [API Documentation](docs/API.md)
+- [API Documentation](docs/API_REFERENCE.md)
+- [Changelog](CHANGELOG.md)
 
 ## Security Notes
 - Never commit `.env` files with real credentials
@@ -100,6 +106,15 @@ operation/
 
 ## License
 Proprietary - All rights reserved
+
+## Version Information
+
+The platform uses semantic versioning (MAJOR.MINOR.PATCH):
+- **MAJOR**: Breaking API changes
+- **MINOR**: New features (backwards compatible)
+- **PATCH**: Bug fixes (backwards compatible)
+
+Current version is available at `/api/v1/version` endpoint or in the dashboard.
 
 ## Support
 For issues or questions, please refer to the documentation or contact the development team.

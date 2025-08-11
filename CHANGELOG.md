@@ -1,11 +1,28 @@
 # Changelog
 
-All notable changes to the 24/7 Autonomous Trading System will be documented in this file.
+All notable changes to the VTuber Autonomy Platform will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.1.0] - 2025-08-11
+
+### Added
+- **Automatic Versioning System** - CI/CD integration for semantic versioning
+  - VERSION file for centralized version management
+  - `_version.py` module for dynamic version reading
+  - GitHub Actions workflow for automatic version bumping based on conventional commits
+  - Release workflow with changelog generation and Docker image tagging
+  - Version display in dashboard and API endpoints (`/health`, `/api/v1/version`)
+
+### Changed
+- **VTuber Platform Focus** - Complete transition from trading to VTuber autonomy
+  - Replaced all trading references with VTuber agent management
+  - Updated dashboard to show agent status and stream monitoring
+  - Migrated database models from trading entities to VTuber agents
+  - Removed legacy trading code from app folder
 
 ### Changed
 - **Repository Structure** - Major cleanup for production readiness
