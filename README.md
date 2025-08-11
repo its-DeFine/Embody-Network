@@ -9,7 +9,7 @@ A comprehensive platform for managing virtual embodied agents (VTubers) with adv
 ### Prerequisites
 - Docker & Docker Compose
 - Python 3.11+
-- Redis 6.0+
+- Redis 6.0+ (optional if using Docker Redis)
 - 8GB RAM minimum
 
 ### Installation
@@ -21,20 +21,46 @@ cd operation
 # Copy environment configuration
 cp .env.example .env
 # Edit .env with your configuration
+```
 
-# Start Redis
-redis-server
+### Launch Options
 
-# Launch Central Manager
-docker-compose -f docker-compose.manager.debug.yml up -d
+#### Option 1: Central Manager with Dashboard
+```bash
+# Launch manager with integrated dashboard UI
+docker-compose -f docker-compose.manager.yml up -d
 
-# Launch VTuber Services
+# Access Dashboard at: http://localhost:8081
+# API available at: http://localhost:8010
+```
+
+#### Option 2: Full VTuber Autonomy System
+```bash
+# Launch all VTuber services (orchestrator)
 cd autonomy
-docker-compose -f docker-compose.yml up -d
+docker-compose up -d
 
-# Access Dashboard
-python3 -m http.server 8081
-# Open http://localhost:8081/vtuber-dashboard-v3.html
+# Services:
+# - NeuroSync: http://localhost:5001
+# - AutoGen: http://localhost:8200
+# - RTMP Stream: rtmp://localhost:1935/live
+```
+
+## Project Structure
+```
+operation/
+├── app/                      # Central manager application
+│   ├── api/                  # API endpoints
+│   └── core/                 # Core business logic
+├── autonomy/                 # VTuber autonomy system
+│   ├── docker-compose.yml    # Full VTuber services
+│   └── docker-vtuber/        # VTuber implementation
+├── docker/                   # Docker configurations
+│   └── ui/                   # Dashboard UI files
+├── scripts/                  # Utility scripts
+│   └── utilities/            # Agent management tools
+├── docs/                     # Documentation
+└── docker-compose.manager.yml # Manager with UI
 ```
 
 ## Architecture
@@ -65,12 +91,6 @@ python3 -m http.server 8081
 - [Production Setup Guide](docs/PRODUCTION_SETUP.md)
 - [Architecture Overview](docs/ARCHITECTURE.md)
 - [API Documentation](docs/API.md)
-
-## Key Files
-- `agent_manager_v2.py` - Advanced agent management with categorization
-- `vtuber-dashboard-v3.html` - Web management interface
-- `app/api/embodiment.py` - Core API endpoints
-- `docker-compose.yml` - Service orchestration
 
 ## Security Notes
 - Never commit `.env` files with real credentials

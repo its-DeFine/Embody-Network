@@ -3,20 +3,22 @@ version: '3.8'
 services:
   redis:
     image: redis:7-alpine
-    container_name: debug-central-redis-8010
+    container_name: central-redis
     command: redis-server --appendonly yes --bind 0.0.0.0
     networks: [central-network]
+    volumes:
+      - redis-data:/data
 
   central-manager:
     build:
       context: .
       dockerfile: Dockerfile.manager.debug
-    container_name: debug-central-manager-8010
+    container_name: central-manager
     environment:
       - REDIS_URL=redis://redis:6379
       - ENABLE_DISTRIBUTED=true
       - JWT_SECRET=debug-central-manager-jwt-secret-very-long-32-chars-OK
-      - ADMIN_PASSWORD=debug-admin-password-very-strong-123
+      - ADMIN_PASSWORD=${MANAGER_ADMIN_PASSWORD:-admin}
       - MASTER_SECRET_KEY=debug-master-key-for-secure-orchestrator-communication-32chars
       - LOG_LEVEL=INFO
       - SKIP_PGP_INIT=true
@@ -27,9 +29,26 @@ services:
       - redis
     networks: [central-network]
     working_dir: /app
+    volumes:
+      - ./app:/app/app:ro
+
+  dashboard:
+    image: nginx:alpine
+    container_name: central-dashboard
+    ports:
+      - "8081:80"
+    volumes:
+      - ./docker/ui/html:/usr/share/nginx/html:ro
+      - ./docker/ui/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [central-network]
+    depends_on:
+      - central-manager
 
 networks:
   central-network:
     driver: bridge
+
+volumes:
+  redis-data:
 
 
