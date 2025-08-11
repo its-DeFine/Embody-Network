@@ -253,11 +253,18 @@ else:
 # Health check
 @app.get("/health")
 async def health():
+    from ._version import get_version
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow(),
-        "version": "1.0.0"
+        "version": get_version()
     }
+
+# Version endpoint
+@app.get("/api/v1/version")
+async def get_version_info():
+    from ._version import get_version_info as get_full_version
+    return get_full_version()
 
 # Enhanced WebSocket endpoints using WebSocket Manager
 @app.websocket("/ws")

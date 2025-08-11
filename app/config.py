@@ -3,13 +3,14 @@ from typing import Optional, List
 from pydantic import validator
 from pydantic_settings import BaseSettings
 import os
+from ._version import get_version
 
 class Settings(BaseSettings):
     """Application settings with environment variable support"""
     
     # API Settings
     api_title: str = "VTuber Autonomy Platform"
-    api_version: str = "1.0.0"
+    api_version: str = get_version()
     api_prefix: str = "/api/v1"
     
     # Security
