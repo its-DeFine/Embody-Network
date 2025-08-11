@@ -1,4 +1,4 @@
-name: Release
+name: Create Release
 
 on:
   push:
@@ -8,60 +8,100 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-    
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-    
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v4
-      with:
-        images: |
-          ${{ secrets.DOCKER_USERNAME }}/autogen-platform
-        tags: |
-          type=ref,event=tag
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-    
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-    
-    - name: Create Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
-        body: |
-          ## Changes in this Release
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           
-          ### Features
-          - Feature 1
-          - Feature 2
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found, including all commits"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" HEAD)
+          else
+            echo "Generating changelog from $PREVIOUS_TAG to HEAD"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD)
+          fi
           
-          ### Bug Fixes
-          - Fix 1
-          - Fix 2
-          
-          ### Docker Image
-          ```bash
-          docker pull ${{ secrets.DOCKER_USERNAME }}/autogen-platform:${{ github.ref_name }}
-          ```
+          # Create changelog with categorization
+          {
+            echo "changelog<<EOF"
+            echo "## What's Changed in v${{ steps.version.outputs.version }}"
+            echo ""
+            
+            # Features
+            FEATURES=$(echo "$COMMITS" | grep -E "^- feat(\(.*\))?:" || true)
+            if [ -n "$FEATURES" ]; then
+              echo "### 🚀 Features"
+              echo "$FEATURES"
+              echo ""
+            fi
+            
+            # Bug fixes
+            FIXES=$(echo "$COMMITS" | grep -E "^- fix(\(.*\))?:" || true)
+            if [ -n "$FIXES" ]; then
+              echo "### 🐛 Bug Fixes"
+              echo "$FIXES"
+              echo ""
+            fi
+            
+            # Other changes
+            OTHERS=$(echo "$COMMITS" | grep -vE "^- (feat|fix)(\(.*\))?:" || true)
+            if [ -n "$OTHERS" ]; then
+              echo "### 📝 Other Changes"
+              echo "$OTHERS"
+              echo ""
+            fi
+            
+            if [ -n "$PREVIOUS_TAG" ]; then
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...v${{ steps.version.outputs.version }}"
+            fi
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push Manager Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.manager
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/vtuber-manager:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}/vtuber-manager:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false

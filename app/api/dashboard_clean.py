@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 
 from ..dependencies import get_current_user
+from .._version import get_version, get_version_info
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -138,6 +139,7 @@ VTUBER_DASHBOARD_HTML = '''<!DOCTYPE html>
         <div class="header">
             <h1>🎭 VTuber Agent Management</h1>
             <p style="opacity: 0.8;">Real-Time Agent & Stream Monitoring</p>
+            <p style="opacity: 0.6; font-size: 0.9rem;">Version: <span id="app-version">loading...</span></p>
         </div>
         
         <div id="dashboard-content">
@@ -155,6 +157,11 @@ VTUBER_DASHBOARD_HTML = '''<!DOCTYPE html>
     <script>
         async function loadDashboard() {
             try {
+                // Load version info
+                fetch('/api/v1/version').then(r => r.json()).then(v => {
+                    document.getElementById('app-version').textContent = v.version;
+                }).catch(() => {});
+                
                 // Load system status
                 const systemResponse = await fetch('/api/v1/embodiment/agents');
                 const agents = systemResponse.ok ? await systemResponse.json() : [];
@@ -299,3 +306,8 @@ async def get_agents_summary(user: Dict = Depends(get_current_user)):
         "agents": [],
         "timestamp": datetime.utcnow().isoformat()
     }
+
+@router.get("/api/version")
+async def get_version_endpoint():
+    """Get application version information"""
+    return get_version_info()
