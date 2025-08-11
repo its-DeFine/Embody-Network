@@ -18,7 +18,6 @@ from http import HTTPStatus
 from pydantic import BaseModel, Field
 
 from ..dependencies import get_redis, get_current_user
-from ..core.market.market_data import market_data_service
 from ..infrastructure.monitoring.reliability_manager import reliability_manager
 from ..config import settings
 
@@ -104,7 +103,7 @@ async def get_system_status(
     """Get comprehensive system status"""
     try:
         # Get market data health
-        market_health = await market_data_service.get_system_health()
+        market_health = {"status": "disabled", "message": "Market service removed"}
         
         # Get active agents
         agent_keys = await redis.keys("agent:*")
@@ -173,7 +172,8 @@ async def get_provider_status(
         # Get provider health from reliability manager
         health_report = await reliability_manager.get_health_report()
         
-        for provider_name, provider in market_data_service.all_providers.items():
+        # Market providers removed
+        all_providers = {}
             provider_health = health_report["providers"].get(provider_name, {})
             
             providers_status.append({
@@ -215,10 +215,8 @@ async def configure_provider(
         
         # Update market data service routing if this is primary provider
         if config.priority == 1:
-            if config.name in market_data_service.providers:
-                market_data_service.primary_provider = config.name
-            elif config.name in market_data_service.crypto_providers:
-                market_data_service.primary_crypto_provider = config.name
+            # Market provider configuration removed
+            pass
         
         # Reset circuit breaker if re-enabling
         if config.enabled:
@@ -634,7 +632,7 @@ async def set_adaptive_directive(
     """Set adaptive trading directive from central manager"""
     try:
         # Import the adaptive strategy manager
-        from ..trading_strategies_adaptive import adaptive_strategy_manager
+        # Trading strategies removed - VTuber system\n        adaptive_strategy_manager = None
         
         # Update the directive
         adaptive_strategy_manager.update_directive({

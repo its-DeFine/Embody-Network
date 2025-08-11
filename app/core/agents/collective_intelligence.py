@@ -22,7 +22,6 @@ from collections import defaultdict, Counter
 import statistics
 
 from ...dependencies import get_redis
-from ..market.market_data import market_data_service
 from .agent_manager import agent_manager, AgentMessage, MessageType
 
 logger = logging.getLogger(__name__)

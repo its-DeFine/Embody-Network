@@ -1,311 +1,199 @@
 """
-Database models for the trading system
+Database models for the VTuber system
 """
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
-from decimal import Decimal
 from dataclasses import dataclass, asdict
 import json
 
 
-class TradeStatus(str, Enum):
-    """Trade execution status"""
-    PENDING = "pending"
-    EXECUTED = "executed"
-    CANCELLED = "cancelled"
-    FAILED = "failed"
+class AgentStatus(str, Enum):
+    """Agent status types"""
+    ONLINE = "online"
+    OFFLINE = "offline"
+    IDLE = "idle"
+    ACTIVE = "active"
+    ERROR = "error"
 
 
-class TradeType(str, Enum):
-    """Type of trade"""
-    BUY = "buy"
-    SELL = "sell"
+class StreamStatus(str, Enum):
+    """Stream status types"""
+    LIVE = "live"
+    OFFLINE = "offline"
+    STARTING = "starting"
+    STOPPING = "stopping"
+    ERROR = "error"
 
 
-class OrderType(str, Enum):
-    """Order type"""
-    MARKET = "market"
-    LIMIT = "limit"
-    STOP_LOSS = "stop_loss"
-    TAKE_PROFIT = "take_profit"
-
-
-class TradingStrategy(str, Enum):
-    """Trading strategy types"""
-    ARBITRAGE = "arbitrage"
-    SCALPING = "scalping"
-    DCA = "dca"  # Dollar Cost Averaging
-    MOMENTUM = "momentum"
-    MEAN_REVERSION = "mean_reversion"
+class CommandType(str, Enum):
+    """Command types for agents"""
+    SPEAK = "speak"
+    GESTURE = "gesture"
+    EMOTION = "emotion"
+    MOVE = "move"
+    ACTIVATE = "activate"
+    DEACTIVATE = "deactivate"
 
 
 @dataclass
-class Portfolio:
-    """Portfolio model to track capital and positions"""
+class VTuberAgent:
+    """VTuber agent model"""
     id: str
-    initial_capital: Decimal
-    current_capital: Decimal
-    available_cash: Decimal
-    total_value: Decimal
-    positions: Dict[str, Dict[str, Any]]  # symbol -> position data
-    performance_metrics: Dict[str, float]
+    name: str
+    character_type: str
+    status: AgentStatus
+    personality_traits: List[str]
+    voice_model: Optional[str]
+    avatar_model: Optional[str]
+    stream_key: Optional[str]
+    metadata: Dict[str, Any]
     created_at: datetime
     updated_at: datetime
+    last_active: Optional[datetime]
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
         result = asdict(self)
-        # Convert Decimal to float for JSON serialization
-        result["initial_capital"] = float(self.initial_capital)
-        result["current_capital"] = float(self.current_capital)
-        result["available_cash"] = float(self.available_cash)
-        result["total_value"] = float(self.total_value)
+        result["status"] = self.status.value
         result["created_at"] = self.created_at.isoformat()
         result["updated_at"] = self.updated_at.isoformat()
+        if self.last_active:
+            result["last_active"] = self.last_active.isoformat()
         return result
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Portfolio":
-        """Create Portfolio from dictionary"""
+    def from_dict(cls, data: Dict[str, Any]) -> "VTuberAgent":
+        """Create VTuberAgent from dictionary"""
         return cls(
             id=data["id"],
-            initial_capital=Decimal(str(data["initial_capital"])),
-            current_capital=Decimal(str(data["current_capital"])),
-            available_cash=Decimal(str(data["available_cash"])),
-            total_value=Decimal(str(data["total_value"])),
-            positions=data["positions"],
-            performance_metrics=data["performance_metrics"],
+            name=data["name"],
+            character_type=data["character_type"],
+            status=AgentStatus(data["status"]),
+            personality_traits=data.get("personality_traits", []),
+            voice_model=data.get("voice_model"),
+            avatar_model=data.get("avatar_model"),
+            stream_key=data.get("stream_key"),
+            metadata=data.get("metadata", {}),
             created_at=datetime.fromisoformat(data["created_at"]),
-            updated_at=datetime.fromisoformat(data["updated_at"])
+            updated_at=datetime.fromisoformat(data["updated_at"]),
+            last_active=datetime.fromisoformat(data["last_active"]) if data.get("last_active") else None
         )
 
 
 @dataclass
-class Trade:
-    """Trade model to record all executions"""
+class AgentSession:
+    """Session model for agent activities"""
     id: str
-    portfolio_id: str
-    symbol: str
-    trade_type: TradeType
-    order_type: OrderType
-    quantity: Decimal
-    price: Optional[Decimal]
-    executed_price: Optional[Decimal]
-    executed_quantity: Optional[Decimal]
-    status: TradeStatus
-    strategy: TradingStrategy
-    stop_loss: Optional[Decimal]
-    take_profit: Optional[Decimal]
-    commission: Decimal
-    pnl: Optional[Decimal]
-    metadata: Dict[str, Any]  # Additional trade data
+    agent_id: str
+    session_type: str  # "stream", "interaction", "performance"
+    started_at: datetime
+    ended_at: Optional[datetime]
+    stream_url: Optional[str]
+    viewer_count: int
+    interaction_count: int
+    commands_executed: List[Dict[str, Any]]
+    metadata: Dict[str, Any]
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization"""
+        result = asdict(self)
+        result["started_at"] = self.started_at.isoformat()
+        if self.ended_at:
+            result["ended_at"] = self.ended_at.isoformat()
+        return result
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentSession":
+        """Create AgentSession from dictionary"""
+        return cls(
+            id=data["id"],
+            agent_id=data["agent_id"],
+            session_type=data["session_type"],
+            started_at=datetime.fromisoformat(data["started_at"]),
+            ended_at=datetime.fromisoformat(data["ended_at"]) if data.get("ended_at") else None,
+            stream_url=data.get("stream_url"),
+            viewer_count=data.get("viewer_count", 0),
+            interaction_count=data.get("interaction_count", 0),
+            commands_executed=data.get("commands_executed", []),
+            metadata=data.get("metadata", {})
+        )
+
+
+@dataclass
+class AgentCommand:
+    """Command sent to an agent"""
+    id: str
+    agent_id: str
+    command_type: CommandType
+    payload: Dict[str, Any]
+    priority: int
+    status: str  # "pending", "executing", "completed", "failed"
     created_at: datetime
     executed_at: Optional[datetime]
-    updated_at: datetime
+    result: Optional[Dict[str, Any]]
+    error: Optional[str]
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
         result = asdict(self)
-        # Convert Decimal to float for JSON serialization
-        result["quantity"] = float(self.quantity)
-        result["price"] = float(self.price) if self.price else None
-        result["executed_price"] = float(self.executed_price) if self.executed_price else None
-        result["executed_quantity"] = float(self.executed_quantity) if self.executed_quantity else None
-        result["stop_loss"] = float(self.stop_loss) if self.stop_loss else None
-        result["take_profit"] = float(self.take_profit) if self.take_profit else None
-        result["commission"] = float(self.commission)
-        result["pnl"] = float(self.pnl) if self.pnl else None
+        result["command_type"] = self.command_type.value
         result["created_at"] = self.created_at.isoformat()
-        result["executed_at"] = self.executed_at.isoformat() if self.executed_at else None
-        result["updated_at"] = self.updated_at.isoformat()
+        if self.executed_at:
+            result["executed_at"] = self.executed_at.isoformat()
         return result
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Trade":
-        """Create Trade from dictionary"""
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentCommand":
+        """Create AgentCommand from dictionary"""
         return cls(
             id=data["id"],
-            portfolio_id=data["portfolio_id"],
-            symbol=data["symbol"],
-            trade_type=TradeType(data["trade_type"]),
-            order_type=OrderType(data["order_type"]),
-            quantity=Decimal(str(data["quantity"])),
-            price=Decimal(str(data["price"])) if data["price"] else None,
-            executed_price=Decimal(str(data["executed_price"])) if data["executed_price"] else None,
-            executed_quantity=Decimal(str(data["executed_quantity"])) if data["executed_quantity"] else None,
-            status=TradeStatus(data["status"]),
-            strategy=TradingStrategy(data["strategy"]),
-            stop_loss=Decimal(str(data["stop_loss"])) if data["stop_loss"] else None,
-            take_profit=Decimal(str(data["take_profit"])) if data["take_profit"] else None,
-            commission=Decimal(str(data["commission"])),
-            pnl=Decimal(str(data["pnl"])) if data["pnl"] else None,
-            metadata=data["metadata"],
+            agent_id=data["agent_id"],
+            command_type=CommandType(data["command_type"]),
+            payload=data.get("payload", {}),
+            priority=data.get("priority", 5),
+            status=data["status"],
             created_at=datetime.fromisoformat(data["created_at"]),
-            executed_at=datetime.fromisoformat(data["executed_at"]) if data["executed_at"] else None,
-            updated_at=datetime.fromisoformat(data["updated_at"])
+            executed_at=datetime.fromisoformat(data["executed_at"]) if data.get("executed_at") else None,
+            result=data.get("result"),
+            error=data.get("error")
         )
 
 
 @dataclass
-class Position:
-    """Position model for tracking holdings"""
+class StreamMetrics:
+    """Metrics for streaming sessions"""
     id: str
-    portfolio_id: str
-    symbol: str
-    quantity: Decimal
-    average_price: Decimal
-    current_price: Decimal
-    market_value: Decimal
-    unrealized_pnl: Decimal
-    realized_pnl: Decimal
-    cost_basis: Decimal
-    created_at: datetime
-    updated_at: datetime
+    session_id: str
+    timestamp: datetime
+    viewer_count: int
+    chat_messages: int
+    donations_received: float
+    engagement_rate: float
+    sentiment_score: float
+    fps: float
+    bitrate: int
+    dropped_frames: int
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
         result = asdict(self)
-        # Convert Decimal to float for JSON serialization
-        for field in ["quantity", "average_price", "current_price", "market_value", 
-                     "unrealized_pnl", "realized_pnl", "cost_basis"]:
-            result[field] = float(getattr(self, field))
-        result["created_at"] = self.created_at.isoformat()
-        result["updated_at"] = self.updated_at.isoformat()
+        result["timestamp"] = self.timestamp.isoformat()
         return result
-
-
-@dataclass
-class PerformanceMetrics:
-    """Performance metrics model for tracking"""
-    id: str
-    portfolio_id: str
-    period: str  # daily, weekly, monthly, all_time
-    total_return: float
-    total_return_pct: float
-    sharpe_ratio: float
-    max_drawdown: float
-    win_rate: float
-    profit_factor: float
-    total_trades: int
-    winning_trades: int
-    losing_trades: int
-    average_win: float
-    average_loss: float
-    largest_win: float
-    largest_loss: float
-    consecutive_wins: int
-    consecutive_losses: int
-    volatility: float
-    beta: Optional[float]
-    alpha: Optional[float]
-    created_at: datetime
-    updated_at: datetime
     
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization"""
-        result = asdict(self)
-        result["created_at"] = self.created_at.isoformat()
-        result["updated_at"] = self.updated_at.isoformat()
-        return result
-
-
-@dataclass
-class TradingSession:
-    """Trading session model"""
-    id: str
-    portfolio_id: str
-    strategy: TradingStrategy
-    status: str  # active, paused, stopped
-    start_time: datetime
-    end_time: Optional[datetime]
-    target_symbols: List[str]
-    parameters: Dict[str, Any]
-    performance: Dict[str, float]
-    trades_count: int
-    created_at: datetime
-    updated_at: datetime
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization"""
-        result = asdict(self)
-        result["start_time"] = self.start_time.isoformat()
-        result["end_time"] = self.end_time.isoformat() if self.end_time else None
-        result["created_at"] = self.created_at.isoformat()
-        result["updated_at"] = self.updated_at.isoformat()
-        return result
-
-
-# In-memory storage for demo purposes
-# In production, this should be replaced with a proper database
-class InMemoryStorage:
-    """Simple in-memory storage for models"""
-    
-    def __init__(self):
-        self.portfolios: Dict[str, Portfolio] = {}
-        self.trades: Dict[str, Trade] = {}
-        self.positions: Dict[str, Position] = {}
-        self.performance_metrics: Dict[str, PerformanceMetrics] = {}
-        self.trading_sessions: Dict[str, TradingSession] = {}
-    
-    def save_portfolio(self, portfolio: Portfolio) -> Portfolio:
-        """Save portfolio to storage"""
-        portfolio.updated_at = datetime.utcnow()
-        self.portfolios[portfolio.id] = portfolio
-        return portfolio
-    
-    def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
-        """Get portfolio by ID"""
-        return self.portfolios.get(portfolio_id)
-    
-    def save_trade(self, trade: Trade) -> Trade:
-        """Save trade to storage"""
-        trade.updated_at = datetime.utcnow()
-        self.trades[trade.id] = trade
-        return trade
-    
-    def get_trade(self, trade_id: str) -> Optional[Trade]:
-        """Get trade by ID"""
-        return self.trades.get(trade_id)
-    
-    def get_trades_by_portfolio(self, portfolio_id: str) -> List[Trade]:
-        """Get all trades for a portfolio"""
-        return [trade for trade in self.trades.values() if trade.portfolio_id == portfolio_id]
-    
-    def save_position(self, position: Position) -> Position:
-        """Save position to storage"""
-        position.updated_at = datetime.utcnow()
-        self.positions[position.id] = position
-        return position
-    
-    def get_positions_by_portfolio(self, portfolio_id: str) -> List[Position]:
-        """Get all positions for a portfolio"""
-        return [pos for pos in self.positions.values() if pos.portfolio_id == portfolio_id]
-    
-    def save_performance_metrics(self, metrics: PerformanceMetrics) -> PerformanceMetrics:
-        """Save performance metrics to storage"""
-        metrics.updated_at = datetime.utcnow()
-        self.performance_metrics[metrics.id] = metrics
-        return metrics
-    
-    def get_performance_metrics(self, portfolio_id: str, period: str) -> Optional[PerformanceMetrics]:
-        """Get performance metrics by portfolio and period"""
-        for metrics in self.performance_metrics.values():
-            if metrics.portfolio_id == portfolio_id and metrics.period == period:
-                return metrics
-        return None
-    
-    def save_trading_session(self, session: TradingSession) -> TradingSession:
-        """Save trading session to storage"""
-        session.updated_at = datetime.utcnow()
-        self.trading_sessions[session.id] = session
-        return session
-    
-    def get_active_trading_sessions(self, portfolio_id: str) -> List[TradingSession]:
-        """Get active trading sessions for a portfolio"""
-        return [session for session in self.trading_sessions.values() 
-                if session.portfolio_id == portfolio_id and session.status == "active"]
-
-
-# Global storage instance
-storage = InMemoryStorage()
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StreamMetrics":
+        """Create StreamMetrics from dictionary"""
+        return cls(
+            id=data["id"],
+            session_id=data["session_id"],
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+            viewer_count=data.get("viewer_count", 0),
+            chat_messages=data.get("chat_messages", 0),
+            donations_received=data.get("donations_received", 0.0),
+            engagement_rate=data.get("engagement_rate", 0.0),
+            sentiment_score=data.get("sentiment_score", 0.0),
+            fps=data.get("fps", 30.0),
+            bitrate=data.get("bitrate", 0),
+            dropped_frames=data.get("dropped_frames", 0)
+        )

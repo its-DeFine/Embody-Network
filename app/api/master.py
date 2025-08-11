@@ -20,7 +20,6 @@ import logging
 from ..dependencies import get_current_user, get_redis
 from ..core.orchestration.orchestrator import orchestrator
 from ..core.agents.agent_manager import agent_manager
-from ..core.trading.trading_engine import trading_engine
 
 logger = logging.getLogger(__name__)
 
