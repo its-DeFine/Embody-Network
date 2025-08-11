@@ -12,7 +12,7 @@ services:
   central-manager:
     build:
       context: .
-      dockerfile: Dockerfile.manager.debug
+      dockerfile: Dockerfile.manager
     container_name: central-manager
     environment:
       - REDIS_URL=redis://redis:6379

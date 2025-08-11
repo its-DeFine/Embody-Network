@@ -5,8 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install minimal requirements for manager debug
-COPY requirements.manager.debug.txt /app/requirements.txt
+# Install minimal requirements for manager
+COPY requirements.manager.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy application code

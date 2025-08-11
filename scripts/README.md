@@ -51,7 +51,16 @@ cd setup
 # Downloads Ollama models for enhanced trading intelligence
 ```
 
-### 4. Start Trading System
+### 4. Windows: OBS Setup for RTMP Input
+Add a Media Source named `gst` in OBS that plays audio/video from an RTMP URL and download the Windows demo ZIP.
+
+```powershell
+# Run in an elevated PowerShell on Windows
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+scripts\windows\setup_obs_rtmp.ps1 -RtmpUrl "rtmp://localhost:1935/live/mystream"
+```
+
+### 5. Start Trading System
 ```bash
 # Return to root directory
 cd ..
@@ -90,6 +99,13 @@ curl http://localhost:8000/health
 - Sets up local LLM inference
 - Enhances trading decision intelligence
 
+### Windows OBS Setup (`windows/setup_obs_rtmp.ps1`)
+- Installs OBS Studio (winget or silent installer)
+- Creates scene collection `AutoRTMP` with scene `Scene` and media source `gst`
+- Sets network buffering and reconnect delay similar to the screenshot
+- Starts OBS with the new collection and scene
+- Downloads `WindowsDemo.zip` to `Downloads`
+
 ## Production Deployment
 
 For production deployment, run scripts in this order:
@@ -97,7 +113,8 @@ For production deployment, run scripts in this order:
 1. **`setup/configure_apis.sh`** - Configure all API keys
 2. **`setup_pgp_keys.sh`** - Setup security keys
 3. **`setup/register_instance.py`** - Register instance (if using master manager)
-4. **Start system**: `docker-compose up -d`
+4. **Windows (optional)**: `windows/setup_obs_rtmp.ps1`
+5. **Start system**: `docker-compose up -d`
 
 ## Security Notes
 
