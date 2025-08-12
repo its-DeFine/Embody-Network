@@ -743,6 +743,253 @@ async def update_trading_parameters(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Orchestrator Auto-Update Control Endpoints
+
+class OrchestratorUpdateConfig(BaseModel):
+    """Orchestrator update configuration"""
+    enabled: bool = True
+    interval_seconds: int = Field(default=300, ge=60, le=3600)
+    monitor_only: bool = False
+    include_stopped: bool = False
+    rolling_restart: bool = True
+    cleanup_old_images: bool = True
+
+
+class OrchestratorUpdateCommand(BaseModel):
+    """Command to control orchestrator updates"""
+    action: str = Field(..., regex="^(trigger|pause|resume|rollback|status)$")
+    target_version: Optional[str] = None  # For rollback
+    reason: Optional[str] = None
+
+
+class OrchestratorStatus(BaseModel):
+    """Orchestrator container status"""
+    container_id: str
+    image_tag: str
+    status: str
+    health: str
+    uptime_hours: float
+    last_update: Optional[str]
+    pending_update: bool
+
+
+@router.get("/orchestrator/update/status")
+async def get_orchestrator_update_status(
+    user: dict = Depends(get_current_user),
+    redis = Depends(get_redis)
+) -> Dict[str, Any]:
+    """Get current orchestrator update status and configuration"""
+    try:
+        # Get Watchtower configuration from Redis
+        config_data = await redis.hgetall("orchestrator:update:config")
+        
+        # Get update history
+        history_data = await redis.lrange("orchestrator:update:history", 0, 10)
+        history = [json.loads(h) for h in history_data] if history_data else []
+        
+        # Get current orchestrator status
+        status_data = await redis.hgetall("orchestrator:status")
+        
+        return {
+            "configuration": {
+                "enabled": config_data.get(b"enabled", b"true").decode() == "true",
+                "interval_seconds": int(config_data.get(b"interval_seconds", 300)),
+                "monitor_only": config_data.get(b"monitor_only", b"false").decode() == "true",
+                "rolling_restart": config_data.get(b"rolling_restart", b"true").decode() == "true",
+                "cleanup_old_images": config_data.get(b"cleanup_old_images", b"true").decode() == "true"
+            },
+            "current_status": {
+                "container_id": status_data.get(b"container_id", b"").decode(),
+                "image_tag": status_data.get(b"image_tag", b"").decode(),
+                "status": status_data.get(b"status", b"unknown").decode(),
+                "health": status_data.get(b"health", b"unknown").decode(),
+                "uptime_hours": float(status_data.get(b"uptime_hours", 0)),
+                "last_update": status_data.get(b"last_update", b"").decode()
+            },
+            "update_history": history,
+            "watchtower_active": status_data.get(b"watchtower_active", b"false").decode() == "true"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting orchestrator update status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/orchestrator/update/configure")
+async def configure_orchestrator_updates(
+    config: OrchestratorUpdateConfig,
+    user: dict = Depends(get_current_user),
+    redis = Depends(get_redis)
+) -> Dict[str, str]:
+    """Configure orchestrator auto-update settings"""
+    try:
+        # Store configuration in Redis
+        await redis.hset("orchestrator:update:config", mapping={
+            "enabled": str(config.enabled).lower(),
+            "interval_seconds": str(config.interval_seconds),
+            "monitor_only": str(config.monitor_only).lower(),
+            "rolling_restart": str(config.rolling_restart).lower(),
+            "cleanup_old_images": str(config.cleanup_old_images).lower(),
+            "updated_at": datetime.utcnow().isoformat(),
+            "updated_by": user.get("username", "system")
+        })
+        
+        # Log configuration change
+        await redis.lpush("orchestrator:update:history", json.dumps({
+            "type": "configuration_change",
+            "config": config.dict(),
+            "timestamp": datetime.utcnow().isoformat(),
+            "user": user.get("username", "system")
+        }))
+        
+        # Trim history to last 100 entries
+        await redis.ltrim("orchestrator:update:history", 0, 99)
+        
+        return {
+            "status": "success",
+            "message": "Orchestrator update configuration updated successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error configuring orchestrator updates: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/orchestrator/update/command")
+async def send_orchestrator_update_command(
+    command: OrchestratorUpdateCommand,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user),
+    redis = Depends(get_redis)
+) -> Dict[str, str]:
+    """Send command to control orchestrator updates"""
+    try:
+        # Store command in Redis for Watchtower controller to process
+        command_data = {
+            "action": command.action,
+            "target_version": command.target_version,
+            "reason": command.reason,
+            "timestamp": datetime.utcnow().isoformat(),
+            "user": user.get("username", "system")
+        }
+        
+        await redis.lpush("orchestrator:update:commands", json.dumps(command_data))
+        
+        # Log command in history
+        await redis.lpush("orchestrator:update:history", json.dumps({
+            "type": "command",
+            **command_data
+        }))
+        
+        # Handle specific actions
+        if command.action == "trigger":
+            # Trigger immediate update check
+            background_tasks.add_task(trigger_orchestrator_update, redis)
+            message = "Update check triggered successfully"
+            
+        elif command.action == "pause":
+            # Pause auto-updates
+            await redis.hset("orchestrator:update:config", "enabled", "false")
+            message = "Auto-updates paused"
+            
+        elif command.action == "resume":
+            # Resume auto-updates
+            await redis.hset("orchestrator:update:config", "enabled", "true")
+            message = "Auto-updates resumed"
+            
+        elif command.action == "rollback":
+            # Initiate rollback to specific version
+            if not command.target_version:
+                raise HTTPException(status_code=400, detail="Target version required for rollback")
+            background_tasks.add_task(rollback_orchestrator, command.target_version, redis)
+            message = f"Rollback to version {command.target_version} initiated"
+            
+        else:  # status
+            message = "Status request logged"
+        
+        return {
+            "status": "success",
+            "message": message,
+            "command": command.action
+        }
+        
+    except Exception as e:
+        logger.error(f"Error sending orchestrator update command: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/orchestrator/versions")
+async def get_available_orchestrator_versions(
+    user: dict = Depends(get_current_user),
+    redis = Depends(get_redis)
+) -> List[Dict[str, Any]]:
+    """Get list of available orchestrator versions for rollback"""
+    try:
+        # Get version history from Redis
+        versions_data = await redis.lrange("orchestrator:versions", 0, 20)
+        versions = []
+        
+        for v in versions_data:
+            version_info = json.loads(v)
+            versions.append({
+                "tag": version_info.get("tag"),
+                "sha": version_info.get("sha"),
+                "pushed_at": version_info.get("pushed_at"),
+                "size_mb": version_info.get("size_mb", 0),
+                "is_current": version_info.get("is_current", False)
+            })
+        
+        return versions
+        
+    except Exception as e:
+        logger.error(f"Error getting orchestrator versions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Helper Functions for Orchestrator Updates
+
+async def trigger_orchestrator_update(redis):
+    """Trigger immediate orchestrator update check"""
+    try:
+        # This would interact with Watchtower or Docker API
+        # For now, just log the trigger
+        logger.info("Triggering orchestrator update check")
+        
+        # Update status in Redis
+        await redis.hset("orchestrator:status", mapping={
+            "last_update_check": datetime.utcnow().isoformat(),
+            "update_triggered_by": "manual"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error triggering update: {e}")
+
+
+async def rollback_orchestrator(target_version: str, redis):
+    """Rollback orchestrator to specific version"""
+    try:
+        # This would interact with Docker API to pull and deploy specific version
+        logger.info(f"Rolling back orchestrator to version: {target_version}")
+        
+        # Update status
+        await redis.hset("orchestrator:status", mapping={
+            "rollback_in_progress": "true",
+            "rollback_target": target_version,
+            "rollback_started": datetime.utcnow().isoformat()
+        })
+        
+        # In production, this would:
+        # 1. Pull the specific image version
+        # 2. Stop current container
+        # 3. Start new container with target version
+        # 4. Verify health
+        # 5. Update status
+        
+    except Exception as e:
+        logger.error(f"Error during rollback: {e}")
+        await redis.hset("orchestrator:status", "rollback_in_progress", "false")
+
+
 # Helper Functions
 
 async def deploy_agent(agent_id: str, agent_data: Dict[str, Any]):
