@@ -1,0 +1,3 @@
+[submodule "autonomy"]
+	path = autonomy
+	url = https://github.com/its-DeFine/Unreal_Vtuber.git
