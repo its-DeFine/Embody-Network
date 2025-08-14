@@ -1,0 +1,93 @@
+name: Build and Push Autonomy Services
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'autonomy/docker-vtuber/app/AVATAR/**'
+      - 'autonomy/docker-vtuber/app/CORE/**'
+      - 'autonomy/orchestrator/**'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}
+
+jobs:
+  build-neurosync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push NeuroSync S1
+        uses: docker/build-push-action@v5
+        with:
+          context: ./autonomy/docker-vtuber
+          file: ./autonomy/docker-vtuber/app/AVATAR/NeuroBridge/dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/neurosync-s1:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/neurosync-s1:${{ github.sha }}
+
+  build-autogen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push AutoGen Agent
+        uses: docker/build-push-action@v5
+        with:
+          context: ./autonomy/docker-vtuber/app/CORE/autogen-agent
+          file: ./autonomy/docker-vtuber/app/CORE/autogen-agent/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/autogen-agent:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/autogen-agent:${{ github.sha }}
+
+  build-orchestrator:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Orchestrator
+        uses: docker/build-push-action@v5
+        with:
+          context: ./autonomy/orchestrator
+          file: ./autonomy/orchestrator/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/autonomy-orchestrator:autonomy-latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/autonomy-orchestrator:autonomy-${{ github.sha }}
