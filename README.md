@@ -16,18 +16,23 @@ A comprehensive platform for managing virtual embodied agents (VTubers) with adv
 - 8GB RAM minimum
 
 ### Installation
+
+⚠️ **IMPORTANT**: This repository uses git submodules. You MUST clone with the `--recurse-submodules` flag or the `autonomy` directory will be empty.
+
 ```bash
-# Clone the repository with submodules
-git clone --recurse-submodules https://github.com/its-DeFine/agent-net.git
+# REQUIRED: Clone the repository WITH submodules (use this command exactly)
+git clone --recurse-submodules https://github.com/its-DeFine/agent-net.git -b embody-alpha
 cd agent-net
 
-# Initialize submodules if you already cloned without --recurse-submodules
+# Alternative: If you already cloned without submodules, run this to fix it:
 git submodule update --init --recursive
 
 # Copy environment configuration
 cp .env.example .env
 # Edit .env with your configuration
 ```
+
+**Note**: The `autonomy` directory contains the VTuber system from [Unreal_Vtuber](https://github.com/its-DeFine/Unreal_Vtuber) repository. Without initializing submodules, this directory will be empty and the system won't work.
 
 ### Launch Options
 
