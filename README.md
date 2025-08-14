@@ -17,9 +17,12 @@ A comprehensive platform for managing virtual embodied agents (VTubers) with adv
 
 ### Installation
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd operation
+# Clone the repository with submodules
+git clone --recurse-submodules https://github.com/its-DeFine/agent-net.git
+cd agent-net
+
+# Initialize submodules if you already cloned without --recurse-submodules
+git submodule update --init --recursive
 
 # Copy environment configuration
 cp .env.example .env
