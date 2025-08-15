@@ -17,6 +17,7 @@ import logging
 import structlog
 
 from .api import auth, agents, teams, tasks, gpu, market, management, trading, master, audit, dex, ollama, security, cluster
+from .api import orchestrators
 from .api import dashboard_clean as dashboard
 from .api.v1 import oracle
 from .dependencies import get_redis, get_docker
@@ -246,6 +247,7 @@ app.include_router(dex.router)  # DEX trading API
 app.include_router(ollama.router)  # Ollama LLM API
 app.include_router(security.router)  # Security API
 app.include_router(cluster.router)  # Cluster management API
+app.include_router(orchestrators.router)  # Orchestrator management API
 app.include_router(dashboard.router)  # Built-in Trading Dashboard
 
 # Health check
