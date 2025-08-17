@@ -23,6 +23,10 @@ services:
       - LOG_LEVEL=INFO
       - SKIP_PGP_INIT=true
       - EMBODIMENT_ONLY=true
+      # Livepeer connectivity settings
+      - ORCHESTRATOR_SECRET=${ORCHESTRATOR_SECRET:-default_secret}
+      - PROOF_INTERVAL=${PROOF_INTERVAL:-60}
+      - HEARTBEAT_TIMEOUT=${HEARTBEAT_TIMEOUT:-30}
     ports:
       - "8010:8000"
     depends_on:
@@ -31,6 +35,7 @@ services:
     working_dir: /app
     volumes:
       - ./app:/app/app:ro
+      - ./scripts:/app/scripts:ro
 
   dashboard:
     image: nginx:alpine
@@ -44,11 +49,92 @@ services:
     depends_on:
       - central-manager
 
+  # Livepeer Gateway Service
+  livepeer-gateway:
+    image: livepeer/go-livepeer:latest
+    container_name: livepeer-gateway
+    hostname: livepeer-gateway
+    networks: [central-network]
+    environment:
+      # Livepeer Configuration
+      - LP_ETH_URL=${ETH_RPC_URL:-https://mainnet.infura.io/v3/YOUR_INFURA_KEY}
+      - LP_ETH_ACCT_ADDR=${ETH_ACCOUNT_ADDRESS}
+      - LP_ETH_PASSWORD=${ETH_PASSWORD}
+      - LP_NETWORK=${LIVEPEER_NETWORK:-mainnet}
+      - LP_GATEWAY=true
+      - LP_ORCHESTRATOR=false
+      - LP_TRANSCODER=false
+      - LP_BROADCASTER=false
+      
+      # Connectivity Configuration
+      - LP_HTTP_ADDR=0.0.0.0:8935
+      - LP_RTMP_ADDR=0.0.0.0:1935
+      - LP_CLI_ADDR=0.0.0.0:7935
+      
+      # Performance Settings
+      - LP_MAX_SESSIONS=${MAX_SESSIONS:-10}
+      - LP_MAX_PRICE_PER_UNIT=${MAX_PRICE:-1000}
+      - LP_MIN_DEPOSIT=${MIN_DEPOSIT:-1}
+      
+      # Manager Integration
+      - MANAGER_URL=http://central-manager:8000
+      - CONNECTIVITY_PROOF_ENABLED=true
+    ports:
+      - "8935:8935"  # HTTP API
+      - "1935:1935"   # RTMP
+      - "7935:7935"   # CLI
+    volumes:
+      - ./data/gateway:/data
+      - livepeer-data:/root/.lpData
+    command: >
+      -gateway
+      -orchAddr=${ORCHESTRATOR_ADDRESSES:-https://livepeer-orchestrator:9995}
+      -httpAddr 0.0.0.0:8935
+      -httpIngest=true
+      -rtmpAddr 0.0.0.0:1935
+      -cliAddr 0.0.0.0:7935
+      -dataDir=/data
+      -maxTicketEV=${MAX_TICKET_EV:-50000000000000}
+      -maxTotalEV=${MAX_TOTAL_EV:-50000000000000}
+      -maxFaceValue=${MAX_FACE_VALUE:-1000000000000000}
+      -maxPricePerUnit=${MAX_PRICE_PER_UNIT:-70000000000000}
+      -v 6
+      -network=${LIVEPEER_NETWORK:-arbitrum-one-mainnet}
+      -ethUrl=${ETH_RPC_URL:-https://arb1.arbitrum.io/rpc}
+      -ethPassword=${ETH_PASSWORD}
+    restart: unless-stopped
+    depends_on:
+      - central-manager
+
+  # Orchestrator Monitor Service
+  orchestrator-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    container_name: orchestrator-monitor
+    hostname: orchestrator-monitor
+    networks: [central-network]
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MANAGER_URL=http://central-manager:8000
+      - MONITOR_MODE=orchestrator
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-30}
+      - PROOF_VALIDATION=true
+      - LOG_LEVEL=INFO
+    command: python -m scripts.utilities.multi_orchestrator_manager --action monitor
+    depends_on:
+      - redis
+      - central-manager
+      - livepeer-gateway
+    restart: unless-stopped
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./app:/app/app:ro
+
 networks:
   central-network:
     driver: bridge
 
 volumes:
   redis-data:
-
-
+  livepeer-data:

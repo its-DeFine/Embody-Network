@@ -10,7 +10,7 @@ services:
     container_name: byoc-gpu-transcoder
     hostname: byoc-gpu-transcoder
     networks:
-      - orchestrator-network
+      - central-network
     environment:
       - ORCHESTRATOR_ID=${ORCHESTRATOR_ID:-orch-001}
       - MANAGER_URL=${MANAGER_URL:-http://central-manager:8010}
@@ -44,7 +44,7 @@ services:
     container_name: byoc-payment-processor
     hostname: byoc-payment-processor
     networks:
-      - orchestrator-network
+      - central-network
     environment:
       - ORCHESTRATOR_ID=${ORCHESTRATOR_ID:-orch-001}
       - MANAGER_URL=${MANAGER_URL:-http://central-manager:8010}
@@ -101,7 +101,7 @@ services:
     container_name: byoc-stream-processor
     hostname: byoc-stream-processor
     networks:
-      - orchestrator-network
+      - central-network
     environment:
       - ORCHESTRATOR_ID=${ORCHESTRATOR_ID:-orch-001}
       - MANAGER_URL=${MANAGER_URL:-http://central-manager:8010}
@@ -128,7 +128,7 @@ services:
     container_name: byoc-ai-model
     hostname: byoc-ai-model
     networks:
-      - orchestrator-network
+      - central-network
     environment:
       - ORCHESTRATOR_ID=${ORCHESTRATOR_ID:-orch-001}
       - MANAGER_URL=${MANAGER_URL:-http://central-manager:8010}
@@ -171,7 +171,7 @@ services:
     container_name: byoc-analytics
     hostname: byoc-analytics
     networks:
-      - orchestrator-network
+      - central-network
     environment:
       - ORCHESTRATOR_ID=${ORCHESTRATOR_ID:-orch-001}
       - MANAGER_URL=${MANAGER_URL:-http://central-manager:8010}
@@ -194,7 +194,7 @@ services:
     container_name: byoc-registry
     hostname: byoc-registry
     networks:
-      - orchestrator-network
+      - central-network
     volumes:
       - byoc-registry-data:/data
     ports:
@@ -206,8 +206,8 @@ services:
       - "orchestrator.capability=registry"
 
 networks:
-  orchestrator-network:
-    name: orchestrator-network
+  central-network:
+    name: central-network
     external: true
 
 volumes:
