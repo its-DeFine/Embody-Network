@@ -3,109 +3,111 @@
 
 ## 🟢 ACTIVE FILES (Used by Docker)
 
-These are the ONLY .env files that Docker actually reads:
-
 ### 1. `/home/geo/operation/.env`
 - **Used by:** `docker-compose.manager.yml`
-- **Purpose:** Configuration for Manager + Livepeer Gateway
+- **Purpose:** Manager + Livepeer Gateway configuration
+- **Based on:** Actual pipeline from `/home/geo/pipelines_tests/agent-net`
 - **Key Settings:**
-  - JWT_SECRET, ADMIN_PASSWORD (security)
-  - ETH_RPC_URL, ORCHESTRATOR_ADDRESSES (Livepeer)
-  - REDIS_URL (Redis connection)
-  - ORCHESTRATOR_SECRET (proof validation)
+  - Security: JWT_SECRET, ADMIN_PASSWORD
+  - Gateway: ETH_RPC_URL, ETH_PASSWORD, ORCHESTRATOR_ADDRESSES
+  - Monitoring: ORCHESTRATOR_SECRET, PROOF_INTERVAL
 
 ### 2. `/home/geo/operation/autonomy/.env`
 - **Used by:** `autonomy/docker-compose.yml`
-- **Purpose:** Configuration for VTuber Autonomy + BYOC services
+- **Purpose:** VTuber Autonomy + BYOC Orchestrator
 - **Key Settings:**
-  - OPENAI_API_KEY, ELEVENLABS_API_KEY (AI services)
-  - OLLAMA settings (local LLM)
-  - Livepeer BYOC configuration (at end of file)
-  - Redis SCB settings
+  - AI Services: OPENAI_API_KEY, ELEVENLABS_API_KEY
+  - Ollama: Local LLM configuration
+  - BYOC: Livepeer orchestrator settings (end of file)
 
-## 📝 TEMPLATE FILES (For Reference Only)
-
-These files are NOT used by Docker, but provide templates/examples:
+## 📝 TEMPLATE FILES (For Setup)
 
 ### `.env.example`
-- Basic template with placeholder values
-- Good for understanding required variables
-- Safe to share (no secrets)
+- Clean template with placeholders
+- Shows required variables
+- Good for new installations
 
-### `.env.central-manager` ⭐
-- **RECOMMENDED**: Use this as source for `.env`
-- Contains comprehensive manager settings
-- Has good defaults and explanations
-- Includes trading/market configurations
+### `.env.manager-template`
+- Complete manager configuration
+- Includes actual pipeline values
+- Ready to copy and use
 
-### `autonomy/.env.example`
-- Basic template for autonomy cluster
-- Minimal configuration example
-
-### `autonomy/.env.autonomy.dev`
-- Development environment template
-- Useful for local development setup
+### `.env.autonomy-template`
+- Complete autonomy configuration
+- Based on pipeline orchestrator settings
+- Includes BYOC worker configuration
 
 ## 🚀 Quick Setup
 
-### For Manager Cluster:
+### For Manager (with Gateway):
 ```bash
-# Option 1: Start from comprehensive template
-cp .env.central-manager .env
+# Option 1: Use template with pipeline values
+cp .env.manager-template .env
 
-# Option 2: Or use basic template
+# Option 2: Use basic template
 cp .env.example .env
 
-# Then edit .env with your values:
+# Edit with your values:
 nano .env
-# Update: JWT_SECRET, ADMIN_PASSWORD, ETH_RPC_URL, ORCHESTRATOR_ADDRESSES
+# Main things to update:
+# - JWT_SECRET (if you want custom)
+# - ETH_PASSWORD (if needed)
+# - ORCHESTRATOR_ADDRESSES (your orchestrators)
 
-# Start the manager
+# Start services
 docker-compose -f docker-compose.manager.yml up -d
 ```
 
-### For Autonomy Cluster:
+### For Autonomy (with BYOC):
 ```bash
 cd autonomy
 
-# The .env already exists and is configured
-# Just update your API keys:
+# If starting fresh:
+cp ../.env.autonomy-template .env
+
+# Update API keys:
 nano .env
 # Update: OPENAI_API_KEY, ELEVENLABS_API_KEY
 
-# Start autonomy
+# Start services
 docker-compose up -d
 ```
 
-## ❌ DELETED FILES (No Longer Needed)
-
-These files were removed to avoid confusion:
-- `.env.livepeer` - Consolidated into main .env
-- `.env.orchestrator` - Not needed
-
-## 📋 Environment Variable Priority
-
-Docker Compose reads environment variables in this order:
-1. Shell environment variables (export VAR=value)
-2. `.env` file in same directory as docker-compose.yml
-3. Default values in docker-compose.yml (${VAR:-default})
-
-## 🔑 Security Notes
-
-- **NEVER** commit `.env` files with real secrets
-- `.env` files are in `.gitignore` for protection
-- Use `.env.example` for sharing configuration structure
-- Rotate secrets regularly in production
-
-## 📍 File Locations Summary
+## 📍 Current Structure
 
 ```
 /home/geo/operation/
-├── .env                    ✅ ACTIVE (Manager)
-├── .env.example            📝 Template
-├── .env.central-manager    📝 Template (Recommended)
+├── .env                    ✅ ACTIVE (Manager + Gateway)
+├── .env.example            📝 Basic template
+├── .env.manager-template   📝 Complete manager template
+├── .env.autonomy-template  📝 Complete autonomy template
 └── autonomy/
-    ├── .env               ✅ ACTIVE (Autonomy)
-    ├── .env.example       📝 Template
-    └── .env.autonomy.dev  📝 Template
+    ├── .env               ✅ ACTIVE (Autonomy + BYOC)
+    ├── .env.example       📝 Basic template
+    └── .env.autonomy.dev  📝 Dev template
 ```
+
+## 🔑 Key Variables Explained
+
+### Gateway Variables (from pipeline):
+- `ETH_RPC_URL`: Arbitrum RPC endpoint (default: public RPC)
+- `ETH_PASSWORD`: Can be empty for BYOC
+- `ORCHESTRATOR_ADDRESSES`: Comma-separated list of orchestrators
+- `MAX_PRICE_PER_UNIT`: 70000000000000 (from pipeline)
+
+### Orchestrator Variables (from pipeline):
+- `LIVEPEER_ORCH_SECRET`: orch-secret (shared secret)
+- `PRICE_PER_UNIT`: 65113436683036 (orchestrator pricing)
+- `TICKET_EV`: 18087065745288 (ticket expected value)
+- `ETH_ORCH_ADDRESS`: Can be empty for BYOC
+
+## ❌ REMOVED FILES
+- `.env.central-manager` - Had outdated trading variables
+- `.env.livepeer` - Consolidated into main .env
+- `.env.orchestrator` - Not needed
+
+## 📋 Notes
+- NO ETH_ACCOUNT_ADDRESS needed (was incorrectly added)
+- ETH_PASSWORD can be empty for BYOC setup
+- Orchestrator addresses are configured manually, not via individual env vars
+- All values taken from actual working pipeline configuration
