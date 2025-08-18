@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from ..dependencies import get_current_user
 from ..core.orchestration.connectivity_monitor import connectivity_monitor
+from ..errors import OrchestrationError
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +106,11 @@ async def submit_connectivity_proof(
             "message": "Connectivity proof accepted",
             "next_proof_required": 60  # seconds
         }
+    except OrchestrationError as e:
+        logger.error(f"[livepeer] Orchestration error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"[livepeer] Proof submission failed: {e}")
+        logger.error(f"[livepeer] Proof submission failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

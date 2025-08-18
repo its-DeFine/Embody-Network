@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import secrets
 import time
 from datetime import datetime, timedelta
@@ -88,7 +89,7 @@ class ConnectivityMonitor:
         # Store in Redis
         redis = await get_redis()
         key = f"{self.REDIS_PREFIX}{orchestrator_id}"
-        await redis.set(key, asdict(connection))
+        await redis.set(key, json.dumps(asdict(connection)))
         
         # Start monitoring
         if orchestrator_id in self._monitoring_tasks:
@@ -156,7 +157,7 @@ class ConnectivityMonitor:
             key = f"{self.REDIS_PREFIX}{orchestrator_id}"
             data = await redis.get(key)
             if data:
-                return data
+                return json.loads(data)
             return None
             
         connection = self._connections[orchestrator_id]
@@ -182,7 +183,7 @@ class ConnectivityMonitor:
         for key in keys:
             data = await redis.get(key)
             if data:
-                connections.append(data)
+                connections.append(json.loads(data))
                 
         return connections
     

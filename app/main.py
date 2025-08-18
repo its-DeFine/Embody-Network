@@ -238,6 +238,7 @@ if EMBODIMENT_ONLY_ENV:
     app.include_router(auth.router)
     app.include_router(embodiment.router)
     app.include_router(orchestrators.router)  # Orchestrator management API
+    app.include_router(livepeer.router)  # Livepeer connectivity pipeline API
     app.include_router(dashboard.router)
 else:
     app.include_router(auth.router)

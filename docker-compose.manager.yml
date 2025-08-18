@@ -51,14 +51,13 @@ services:
 
   # Livepeer Gateway Service
   livepeer-gateway:
-    image: livepeer/go-livepeer:latest
+    image: livepeer/go-livepeer:latest  # Latest includes BYOC support
     container_name: livepeer-gateway
     hostname: livepeer-gateway
     networks: [central-network]
     environment:
       # Livepeer Configuration
       - LP_ETH_URL=${ETH_RPC_URL:-https://mainnet.infura.io/v3/YOUR_INFURA_KEY}
-      - LP_ETH_ACCT_ADDR=${ETH_ACCOUNT_ADDRESS}
       - LP_ETH_PASSWORD=${ETH_PASSWORD}
       - LP_NETWORK=${LIVEPEER_NETWORK:-mainnet}
       - LP_GATEWAY=true
@@ -81,7 +80,7 @@ services:
       - CONNECTIVITY_PROOF_ENABLED=true
     ports:
       - "8935:8935"  # HTTP API
-      - "1935:1935"   # RTMP
+      - "1936:1935"   # RTMP (mapped to 1936 to avoid conflict)
       - "7935:7935"   # CLI
     volumes:
       - ./data/gateway:/data
@@ -130,6 +129,34 @@ services:
     volumes:
       - ./scripts:/app/scripts:ro
       - ./app:/app/app:ro
+
+  # Enhanced Payment Distributor Service
+  payment-distributor:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    container_name: payment-distributor
+    hostname: payment-distributor
+    networks: [central-network]
+    environment:
+      - MANAGER_URL=http://central-manager:8000
+      - GATEWAY_URL=http://livepeer-gateway:8935
+      - ORCHESTRATOR_URL=http://livepeer-orchestrator:9995
+      - WORKER_URL=http://livepeer-worker:9876
+      - ADMIN_EMAIL=admin@system.com
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - PAYMENT_INTERVAL_SECONDS=60  # Base payment interval
+      - BASE_PAYMENT_USD=10.0  # Base payment in USD
+      - ETH_TO_USD=2000.0  # Current ETH/USD rate
+      - MAX_CONSECUTIVE_FAILURES=5
+      - PUNISHMENT_MULTIPLIER=2.0
+    volumes:
+      - ./scripts/services:/app/scripts/services
+    command: python3 /app/scripts/services/enhanced_payment_distributor.py
+    restart: unless-stopped
+    depends_on:
+      - central-manager
+      - redis
 
 networks:
   central-network:
