@@ -116,11 +116,13 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - MANAGER_URL=http://central-manager:8000
+      - ADMIN_EMAIL=admin@system.com
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-LivepeerManager2025!Secure}
       - MONITOR_MODE=orchestrator
       - CHECK_INTERVAL=${CHECK_INTERVAL:-30}
       - PROOF_VALIDATION=true
       - LOG_LEVEL=INFO
-    command: python -m scripts.utilities.multi_orchestrator_manager --action monitor
+    command: python /app/scripts/utilities/orchestrator_monitor_fixed.py
     depends_on:
       - redis
       - central-manager
