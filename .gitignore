@@ -149,6 +149,9 @@ server.log
 # Development directories (should not be in repo)
 /implement/
 /security-scan/
+/backup/
+/backups/
+vtuber-dashboard-v2.html/
 
 # Generated files
 actual_dashboard.html
