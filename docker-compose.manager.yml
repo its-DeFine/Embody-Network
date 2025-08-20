@@ -23,6 +23,10 @@ services:
       - LOG_LEVEL=INFO
       - SKIP_PGP_INIT=true
       - EMBODIMENT_ONLY=true
+      # Livepeer connectivity settings
+      - ORCHESTRATOR_SECRET=${ORCHESTRATOR_SECRET:-default_secret}
+      - PROOF_INTERVAL=${PROOF_INTERVAL:-60}
+      - HEARTBEAT_TIMEOUT=${HEARTBEAT_TIMEOUT:-30}
     ports:
       - "8010:8000"
     depends_on:
@@ -31,6 +35,7 @@ services:
     working_dir: /app
     volumes:
       - ./app:/app/app:ro
+      - ./scripts:/app/scripts:ro
 
   dashboard:
     image: nginx:alpine
@@ -44,11 +49,121 @@ services:
     depends_on:
       - central-manager
 
+  # Livepeer Gateway Service
+  livepeer-gateway:
+    image: livepeer/go-livepeer:latest  # Latest includes BYOC support
+    container_name: livepeer-gateway
+    hostname: livepeer-gateway
+    networks: [central-network]
+    environment:
+      # Livepeer Configuration
+      - LP_ETH_URL=${ETH_RPC_URL:-https://mainnet.infura.io/v3/YOUR_INFURA_KEY}
+      - LP_ETH_PASSWORD=${ETH_PASSWORD}
+      - LP_NETWORK=${LIVEPEER_NETWORK:-mainnet}
+      - LP_GATEWAY=true
+      - LP_ORCHESTRATOR=false
+      - LP_TRANSCODER=false
+      - LP_BROADCASTER=false
+      
+      # Connectivity Configuration
+      - LP_HTTP_ADDR=0.0.0.0:8935
+      - LP_RTMP_ADDR=0.0.0.0:1935
+      - LP_CLI_ADDR=0.0.0.0:7935
+      
+      # Performance Settings
+      - LP_MAX_SESSIONS=${MAX_SESSIONS:-10}
+      - LP_MAX_PRICE_PER_UNIT=${MAX_PRICE:-1000}
+      - LP_MIN_DEPOSIT=${MIN_DEPOSIT:-1}
+      
+      # Manager Integration
+      - MANAGER_URL=http://central-manager:8000
+      - CONNECTIVITY_PROOF_ENABLED=true
+    ports:
+      - "8935:8935"  # HTTP API
+      - "1936:1935"   # RTMP (mapped to 1936 to avoid conflict)
+      - "7935:7935"   # CLI
+    volumes:
+      - ./data/gateway:/data
+      - livepeer-data:/root/.lpData
+    command: >
+      -gateway
+      -orchAddr=${ORCHESTRATOR_ADDRESSES:-https://livepeer-orchestrator:9995}
+      -httpAddr 0.0.0.0:8935
+      -httpIngest=true
+      -rtmpAddr 0.0.0.0:1935
+      -cliAddr 0.0.0.0:7935
+      -dataDir=/data
+      -maxTicketEV=${MAX_TICKET_EV:-50000000000000}
+      -maxTotalEV=${MAX_TOTAL_EV:-50000000000000}
+      -maxFaceValue=${MAX_FACE_VALUE:-1000000000000000}
+      -maxPricePerUnit=${MAX_PRICE_PER_UNIT:-70000000000000}
+      -v 6
+      -network=${LIVEPEER_NETWORK:-arbitrum-one-mainnet}
+      -ethUrl=${ETH_RPC_URL:-https://arb1.arbitrum.io/rpc}
+      -ethPassword=${ETH_PASSWORD}
+    restart: unless-stopped
+    depends_on:
+      - central-manager
+
+  # Orchestrator Monitor Service
+  orchestrator-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    container_name: orchestrator-monitor
+    hostname: orchestrator-monitor
+    networks: [central-network]
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MANAGER_URL=http://central-manager:8000
+      - ADMIN_EMAIL=admin@system.com
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-LivepeerManager2025!Secure}
+      - MONITOR_MODE=orchestrator
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-30}
+      - PROOF_VALIDATION=true
+      - LOG_LEVEL=INFO
+    command: python /app/scripts/utilities/orchestrator_monitor_fixed.py
+    depends_on:
+      - redis
+      - central-manager
+      - livepeer-gateway
+    restart: unless-stopped
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./app:/app/app:ro
+
+  # Enhanced Payment Distributor Service
+  payment-distributor:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    container_name: payment-distributor
+    hostname: payment-distributor
+    networks: [central-network]
+    environment:
+      - MANAGER_URL=http://central-manager:8000
+      - GATEWAY_URL=http://livepeer-gateway:8935
+      - ORCHESTRATOR_URL=http://livepeer-orchestrator:9995
+      - WORKER_URL=http://livepeer-worker:9876
+      - ADMIN_EMAIL=admin@system.com
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - PAYMENT_INTERVAL_SECONDS=60  # Base payment interval
+      - BASE_PAYMENT_USD=10.0  # Base payment in USD
+      - ETH_TO_USD=2000.0  # Current ETH/USD rate
+      - MAX_CONSECUTIVE_FAILURES=5
+      - PUNISHMENT_MULTIPLIER=2.0
+    volumes:
+      - ./scripts/services:/app/scripts/services
+    command: python3 /app/scripts/services/enhanced_payment_distributor.py
+    restart: unless-stopped
+    depends_on:
+      - central-manager
+      - redis
+
 networks:
   central-network:
     driver: bridge
 
 volumes:
   redis-data:
-
-
+  livepeer-data:
