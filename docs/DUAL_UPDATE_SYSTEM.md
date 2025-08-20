@@ -29,7 +29,7 @@ The Dual-Mode Update System provides intelligent, automated updates for orchestr
 │                                                        │
 │  ┌────────────────────────────────────────────────┐  │
 │  │            GitHub Integration                   │  │
-│  │  - Create Issues (agent-net & Unreal_Vtuber)  │  │
+│  │  - Create Issues (Embody-Network & Unreal_Vtuber)  │  │
 │  │  - Generate PRs                                │  │
 │  │  - Track Changes                               │  │
 │  └────────────────────────────────────────────────┘  │
@@ -271,7 +271,7 @@ docker compose logs
 gh auth status
 
 # Test issue creation
-gh issue create --repo its-DeFine/agent-net --title "Test" --body "Test"
+gh issue create --repo its-DeFine/Embody-Network --title "Test" --body "Test"
 
 # Check workflow runs
 gh run list --workflow=dual-update-system.yml

@@ -340,7 +340,7 @@ class UpdateOrchestrator:
         self.repo_path = Path(repo_path)
         self.detector = UpdateDetector(repo_path)
         self.github = GitHubIntegration(
-            "its-DeFine/agent-net",
+            "its-DeFine/Embody-Network",
             "its-DeFine/Unreal_Vtuber"
         )
         self.backup_dir = self.repo_path / "backups" / datetime.now().strftime("%Y%m%d_%H%M%S")

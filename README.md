@@ -1,7 +1,7 @@
 # VTuber Autonomy Platform
 *Enhanced Embodied Multi-Agent System*
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/its-DeFine/agent-net/releases)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue)](https://github.com/its-DeFine/Embody-Network/releases)
 [![License](https://img.shields.io/badge/license-Proprietary-red)](LICENSE)
 
 ## Overview
@@ -21,8 +21,8 @@ A comprehensive platform for managing virtual embodied agents (VTubers) with adv
 
 ```bash
 # REQUIRED: Clone the repository WITH submodules (use this command exactly)
-git clone --recurse-submodules https://github.com/its-DeFine/agent-net.git -b embody-alpha
-cd agent-net
+git clone --recurse-submodules https://github.com/its-DeFine/Embody-Network.git -b embody-alpha
+cd Embody-Network
 
 # Alternative: If you already cloned without submodules, run this to fix it:
 git submodule update --init --recursive
