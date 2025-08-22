@@ -31,6 +31,10 @@ backups/
 .env.local
 .env.production
 .env.orchestrator-local
+# Allow template files
+!.env.*-template
+!.env.autonomy-template
+!.env.orchestrator-template
 
 # Python
 __pycache__/
