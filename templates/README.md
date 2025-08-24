@@ -6,28 +6,23 @@ This folder contains all environment configuration templates for the Embody Netw
 
 ### For Orchestrators (Running Full VTuber System)
 
-#### **`FULL-AUTONOMY.env.template`** ⭐ RECOMMENDED
+#### **`FULL-AUTONOMY.env.template`** ⭐ THE ONLY TEMPLATE YOU NEED
 - **Purpose**: Complete VTuber autonomy system with BYOC orchestrator
-- **Use Case**: External orchestrators wanting to run the full VTuber AI system
-- **Includes**: All VTuber services + Livepeer orchestrator + Manager registration
+- **Use Case**: ALL orchestrators run the full VTuber AI system
+- **Includes**: All VTuber services + Livepeer orchestrator + Manager registration + Auto-updates
 - **Usage**: Copy to `autonomy/.env` and fill in TODO sections
 
-### For Standalone Components
-
-#### `orchestrator-only.env.template`
-- **Purpose**: Standalone orchestrator node (no VTuber system)
-- **Use Case**: Lightweight compute nodes that only process jobs
-- **Note**: Most users should use FULL-AUTONOMY instead
+### For System Administrators Only
 
 #### `manager.env.template`
-- **Purpose**: Central manager service
-- **Use Case**: Running your own manager (not needed for most users)
+- **Purpose**: Central manager service (infrastructure component)
+- **Use Case**: Only for running the central manager (not for orchestrators)
 
-### Examples
+### Example Configuration
 
 #### `example-frank-full.env`
-- Complete example configuration for a full autonomy system
-- Shows all values filled in
+- Complete example configuration showing all values filled in
+- Use as reference when filling out FULL-AUTONOMY.env.template
 
 ## 🚀 Quick Start for New Orchestrators
 
@@ -58,12 +53,12 @@ This folder contains all environment configuration templates for the Embody Netw
 - The system auto-registers with the manager on startup
 - Game runs on Windows, VTuber system runs in Docker
 
-## 🗑️ Deprecated Files
+## 📝 Important Notes for Orchestrators
 
-The following files have been consolidated into the templates above:
-- `.env.autonomy-template` → Use `FULL-AUTONOMY.env.template`
-- `.env.orchestrator-template` → Use `FULL-AUTONOMY.env.template`
-- Individual `.env.*-frank` files → See examples folder
+- **ONE TEMPLATE ONLY**: Use `FULL-AUTONOMY.env.template` for everything
+- **Full System**: Every orchestrator runs the complete VTuber + BYOC system
+- **No Standalone Option**: There is no orchestrator-only setup
+- **Auto-Updates**: Watchtower included for automatic updates
 
 ## 📞 Support
 
