@@ -67,12 +67,9 @@ class UpdateDetector:
         structure_json = json.dumps(compose_data, sort_keys=True)
         return hashlib.sha256(structure_json.encode()).hexdigest()
     
-    def detect_changes(self, force_rebuild_on_vtuber_update: bool = False) -> Tuple[UpdateType, Dict]:
+    def detect_changes(self) -> Tuple[UpdateType, Dict]:
         """Detect what type of changes have occurred"""
         logger.info("Detecting update changes...")
-        
-        # Check for Unreal VTuber submodule updates first
-        vtuber_updated = False
         
         # Fetch latest changes
         try:
@@ -89,15 +86,6 @@ class UpdateDetector:
         
         # Check for submodule updates
         try:
-            # Check submodule status first
-            submodule_status = subprocess.run(
-                ["git", "submodule", "status"],
-                cwd=str(self.repo_path),
-                capture_output=True,
-                text=True
-            )
-            
-            # Update submodules
             subprocess.run(
                 ["git", "submodule", "update", "--remote"],
                 cwd=str(self.repo_path),  # Convert Path to string
@@ -105,19 +93,6 @@ class UpdateDetector:
                 capture_output=True,
                 text=True
             )
-            
-            # Check if docker-vtuber submodule has updates
-            if self.submodule_path.exists():
-                vtuber_check = subprocess.run(
-                    ["git", "diff", "HEAD", "--", "docker-vtuber"],
-                    cwd=str(self.submodule_path.parent),
-                    capture_output=True,
-                    text=True
-                )
-                if vtuber_check.stdout:
-                    vtuber_updated = True
-                    logger.info("Unreal VTuber submodule has updates")
-                    
         except subprocess.CalledProcessError as e:
             logger.warning(f"Submodule update failed: {e.stderr}")
         
@@ -137,7 +112,6 @@ class UpdateDetector:
             'dockerfile_changed': False,
             'config_changed': False,
             'code_changed': False,
-            'vtuber_updated': vtuber_updated,
             'image_only': True,
             'services_added': [],
             'services_removed': [],
@@ -157,24 +131,14 @@ class UpdateDetector:
                 changes['image_only'] = False
             elif file.endswith(('.py', '.js', '.go')):
                 changes['code_changed'] = True
-            # Check if it's a VTuber-related file
-            if 'docker-vtuber' in file or 'vtuber' in file.lower():
-                vtuber_updated = True
-                changes['vtuber_updated'] = True
-        
-        # Force structural rebuild if VTuber was updated and flag is set
-        if force_rebuild_on_vtuber_update and vtuber_updated:
-            logger.info("Forcing structural rebuild due to Unreal VTuber updates")
-            changes['image_only'] = False
-            return UpdateType.STRUCTURAL, changes
         
         # Determine update type
         if not any([changes['compose_changed'], changes['dockerfile_changed'], 
-                   changes['config_changed'], changes['code_changed'], vtuber_updated]):
+                   changes['config_changed'], changes['code_changed']]):
             return UpdateType.NONE, changes
         elif changes['image_only']:
             return UpdateType.IMAGE_ONLY, changes
-        elif changes['compose_changed'] or vtuber_updated:
+        elif changes['compose_changed']:
             return UpdateType.STRUCTURAL, changes
         else:
             return UpdateType.MIXED, changes
@@ -381,7 +345,7 @@ class UpdateOrchestrator:
         )
         self.backup_dir = self.repo_path / "backups" / datetime.now().strftime("%Y%m%d_%H%M%S")
         
-    def execute_update(self, update_type: UpdateType, changes: Dict, force_rebuild: bool = False) -> bool:
+    def execute_update(self, update_type: UpdateType, changes: Dict) -> bool:
         """Execute the appropriate update strategy"""
         logger.info(f"Executing {update_type.value} update...")
         
@@ -393,12 +357,10 @@ class UpdateOrchestrator:
         self._create_backup()
         
         try:
-            if update_type == UpdateType.IMAGE_ONLY and not force_rebuild:
+            if update_type == UpdateType.IMAGE_ONLY:
                 return self._execute_watchtower_update()
-            elif update_type in [UpdateType.STRUCTURAL, UpdateType.MIXED] or force_rebuild:
-                # Force rebuild if VTuber was updated
-                force_fresh_build = force_rebuild or changes.get('vtuber_updated', False)
-                return self._execute_full_revamp(force_rebuild=force_fresh_build)
+            elif update_type in [UpdateType.STRUCTURAL, UpdateType.MIXED]:
+                return self._execute_full_revamp()
             else:
                 logger.error(f"Unknown update type: {update_type}")
                 return False
@@ -454,7 +416,7 @@ class UpdateOrchestrator:
             )
             return True
     
-    def _execute_full_revamp(self, force_rebuild: bool = False) -> bool:
+    def _execute_full_revamp(self) -> bool:
         """Execute full cluster revamp for structural changes"""
         logger.info("Executing full cluster revamp...")
         
@@ -467,16 +429,6 @@ class UpdateOrchestrator:
             cwd=str(self.detector.submodule_path),
             check=True
         )
-        
-        # Clean up old images if forcing rebuild
-        if force_rebuild:
-            logger.info("Cleaning up old images for fresh rebuild...")
-            # Remove all containers and images related to the project
-            subprocess.run(
-                ["docker-compose", "-f", str(compose_path), "down", "--rmi", "local", "-v"],
-                cwd=str(self.detector.submodule_path),
-                check=False  # Don't fail if nothing to remove
-            )
         
         # Pull latest changes
         logger.info("Pulling latest changes...")
@@ -492,15 +444,7 @@ class UpdateOrchestrator:
             check=True
         )
         
-        # Build and start new containers
-        if force_rebuild:
-            logger.info("Building containers from scratch (no cache)...")
-            subprocess.run(
-                ["docker-compose", "-f", str(compose_path), "build", "--no-cache"],
-                cwd=str(self.detector.submodule_path),
-                check=True
-            )
-        
+        # Start new containers
         logger.info("Starting new containers...")
         subprocess.run(
             ["docker-compose", "-f", str(compose_path), "up", "-d"],
@@ -583,22 +527,15 @@ class UpdateOrchestrator:
         
         logger.info("Rollback completed")
     
-    def run(self, auto_approve: bool = False, force_rebuild_on_vtuber_update: bool = False):
+    def run(self, auto_approve: bool = False):
         """Main execution flow"""
         logger.info("Starting Dual-Mode Update Manager...")
         
-        # Check environment variable for forced rebuilds
-        force_rebuild = force_rebuild_on_vtuber_update or \
-                       os.getenv('FORCE_REBUILD_ON_VTUBER_UPDATE', 'false').lower() == 'true'
-        
         # Detect changes
-        update_type, changes = self.detector.detect_changes(force_rebuild_on_vtuber_update=force_rebuild)
+        update_type, changes = self.detector.detect_changes()
         
         logger.info(f"Update type detected: {update_type.value}")
         logger.info(f"Changes: {json.dumps(changes, indent=2)}")
-        
-        if changes.get('vtuber_updated') and force_rebuild:
-            logger.info("VTuber updates detected - forcing full cluster rebuild with no cache")
         
         # Create GitHub workflow
         if not auto_approve:
@@ -612,7 +549,7 @@ class UpdateOrchestrator:
                 return
         
         # Execute update
-        success = self.execute_update(update_type, changes, force_rebuild=force_rebuild)
+        success = self.execute_update(update_type, changes)
         
         if success:
             logger.info("Update completed successfully")
@@ -658,27 +595,17 @@ def main():
         action="store_true",
         help="Only check for updates, don't apply them"
     )
-    parser.add_argument(
-        "--force-rebuild-on-vtuber-update",
-        action="store_true",
-        help="Force full cluster rebuild when VTuber repository is updated"
-    )
     
     args = parser.parse_args()
     
     orchestrator = UpdateOrchestrator(args.repo_path)
     
     if args.check_only:
-        force_rebuild = args.force_rebuild_on_vtuber_update or \
-                       os.getenv('FORCE_REBUILD_ON_VTUBER_UPDATE', 'false').lower() == 'true'
-        update_type, changes = orchestrator.detector.detect_changes(force_rebuild_on_vtuber_update=force_rebuild)
+        update_type, changes = orchestrator.detector.detect_changes()
         print(f"Update type: {update_type.value}")
         print(f"Changes: {json.dumps(changes, indent=2)}")
     else:
-        orchestrator.run(
-            auto_approve=args.auto,
-            force_rebuild_on_vtuber_update=args.force_rebuild_on_vtuber_update
-        )
+        orchestrator.run(auto_approve=args.auto)
 
 
 if __name__ == "__main__":
