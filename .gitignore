@@ -14,12 +14,9 @@ coverage.xml
 .coverage
 htmlcov/
 logs/
-autonomy/logs/
-autonomy/docker-vtuber/app/AVATAR/NeuroBridge/NeuroSync_Player/logs/
-autonomy/docker-vtuber/app/AVATAR/NeuroBridge/NeuroSync_Player/output/
-autonomy/docker-vtuber/app/AVATAR/NeuroBridge/NeuroSync_Player/cache/
-autonomy/docker-vtuber/app/CORE/autogen-agent/.venv/
-autonomy/docker-vtuber/app/AVATAR/NeuroBridge/.venv/
+
+# Autonomy folder (no longer a submodule)
+autonomy/
 **/.venv/
 **/venv/
 *.sqlite3

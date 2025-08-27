@@ -4,7 +4,7 @@ Handles registration, heartbeat, and control operations for orchestrators
 """
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 import structlog
 import httpx
@@ -89,12 +89,22 @@ async def send_control_command(url: str, command: OrchestratorControl) -> Dict[s
 async def register_orchestrator(
     registration: OrchestratorRegistration,
     background_tasks: BackgroundTasks,
-    redis: Redis = Depends(get_redis)
+    redis: Redis = Depends(get_redis),
+    request: Request = None
 ):
     """
     Register a new orchestrator with the central manager
     """
     try:
+        # Extract real IP from Cloudflare headers or request
+        real_ip = "unknown"
+        if request:
+            # Check Cloudflare headers first
+            real_ip = request.headers.get("CF-Connecting-IP") or \
+                     request.headers.get("X-Forwarded-For") or \
+                     request.headers.get("X-Real-IP") or \
+                     request.client.host
+        
         # Generate unique ID for orchestrator
         orchestrator_id = f"{registration.name}_{datetime.utcnow().timestamp()}"
         
@@ -111,6 +121,7 @@ async def register_orchestrator(
             "status": "active",
             "registered_at": datetime.utcnow().isoformat(),
             "last_heartbeat": datetime.utcnow().isoformat(),
+            "registration_ip": real_ip,
             **metadata_str
         }
         
@@ -124,7 +135,9 @@ async def register_orchestrator(
         logger.info("Orchestrator registered", 
                    orchestrator_id=orchestrator_id, 
                    name=registration.name,
-                   url=registration.url)
+                   url=registration.url,
+                   real_ip=real_ip,
+                   metadata=registration.metadata)
         
         return {
             "orchestrator_id": orchestrator_id,
@@ -141,7 +154,8 @@ async def register_orchestrator(
 async def orchestrator_heartbeat(
     orchestrator_id: str,
     heartbeat: OrchestratorHeartbeat,
-    redis: Redis = Depends(get_redis)
+    redis: Redis = Depends(get_redis),
+    request: Request = None
 ):
     """
     Receive heartbeat from orchestrator
@@ -151,19 +165,39 @@ async def orchestrator_heartbeat(
         if not await redis.exists(get_orchestrator_key(orchestrator_id)):
             raise HTTPException(status_code=404, detail="Orchestrator not found")
         
+        # Get orchestrator name from Redis
+        orch_data = await redis.hgetall(get_orchestrator_key(orchestrator_id))
+        orch_name = orch_data.get(b'name', b'unknown').decode() if isinstance(orch_data.get(b'name'), bytes) else orch_data.get('name', 'unknown')
+        
+        # Extract real IP from Cloudflare headers or request
+        real_ip = "unknown"
+        if request:
+            # Check Cloudflare headers first
+            real_ip = request.headers.get("CF-Connecting-IP") or \
+                     request.headers.get("X-Forwarded-For") or \
+                     request.headers.get("X-Real-IP") or \
+                     request.client.host
+        
         # Update heartbeat data
         updates = {
             "last_heartbeat": datetime.utcnow().isoformat(),
             "status": heartbeat.status,
             "active_agents": ",".join(heartbeat.active_agents),
             "load": str(heartbeat.load),
-            "metrics": str(heartbeat.metrics)
+            "metrics": str(heartbeat.metrics),
+            "last_ip": real_ip  # Store the real IP
         }
         
         await redis.hset(get_orchestrator_key(orchestrator_id), mapping=updates)
         await redis.expire(get_orchestrator_key(orchestrator_id), 300)  # Refresh TTL
         
-        logger.debug("Heartbeat received", orchestrator_id=orchestrator_id, status=heartbeat.status)
+        # Log with orchestrator name and real IP
+        logger.info("Heartbeat received", 
+                   orchestrator_id=orchestrator_id,
+                   orchestrator_name=orch_name,
+                   real_ip=real_ip,
+                   status=heartbeat.status,
+                   active_agents=heartbeat.active_agents)
         
         return {"status": "acknowledged", "next_heartbeat": 30}
         
